@@ -1,7 +1,9 @@
 // Memex Offline - extraccion de texto y chunking. Todo local, sin red.
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { IMAGE_EXTENSIONS, ocrImage } from "./ocr.js";
+import { MEDIA_EXTENSIONS, transcribeMedia } from "./media.js";
 
 export const TEXT_EXTENSIONS = new Set([
   ".txt", ".md", ".markdown", ".rst", ".org", ".log", ".csv", ".tsv",
@@ -17,10 +19,16 @@ export const CODE_EXTENSIONS = new Set([
 
 export const PDF_EXTENSIONS = new Set([".pdf"]);
 
+// Extensiones de imagen/medios viven en sus modulos (ocr.js / media.js).
+export { IMAGE_EXTENSIONS } from "./ocr.js";
+export { MEDIA_EXTENSIONS, AUDIO_EXTENSIONS, VIDEO_EXTENSIONS } from "./media.js";
+
 export const SUPPORTED_EXTENSIONS = new Set([
   ...TEXT_EXTENSIONS,
   ...CODE_EXTENSIONS,
   ...PDF_EXTENSIONS,
+  ...IMAGE_EXTENSIONS,
+  ...MEDIA_EXTENSIONS,
 ]);
 
 export const DEFAULT_IGNORES = new Set([
@@ -77,6 +85,16 @@ export function extractText(path) {
   if (PDF_EXTENSIONS.has(ext)) {
     const text = extractPdf(path);
     return text ? { text, extractor: "pdftotext" } : null;
+  }
+
+  if (IMAGE_EXTENSIONS.has(ext)) {
+    const text = ocrImage(path);
+    return text ? { text, extractor: "ocr" } : null;
+  }
+
+  if (MEDIA_EXTENSIONS.has(ext)) {
+    const text = transcribeMedia(path);
+    return text ? { text, extractor: "whisper" } : null;
   }
 
   let buf;
