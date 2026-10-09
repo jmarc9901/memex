@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { basename, extname } from "node:path";
 import { walkFiles, extractText, chunkText, DEFAULT_IGNORES } from "./extract.js";
-import { deleteFile, getIndexedFile, insertFile } from "./db.js";
+import { deleteFile, getIndexedFile, insertFile, setMeta } from "./db.js";
 
 function sha256(path) {
   try {
@@ -17,10 +17,16 @@ function sha256(path) {
  * Indexa (o reindexa) una carpeta de forma incremental.
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {string} root
- * @param {{force?:boolean, ignore?:Set<string>, onProgress?:(info:{done:number,total:number,path:string})=>void}} [opts]
+ * @param {{force?:boolean, ignore?:Set<string>, embedder?:((t:string)=>Float32Array)|null,
+ *          onProgress?:(info:{done:number,total:number,path:string})=>void}} [opts]
  */
 export function indexFolder(db, root, opts = {}) {
   const files = walkFiles(root, { ignore: opts.ignore ?? DEFAULT_IGNORES });
+  const embedder = opts.embedder ?? null;
+  if (embedder) {
+    setMeta(db, "embed_provider", embedder.provider ?? "hash");
+    setMeta(db, "embed_dim", embedder.dim ?? "");
+  }
   const summary = {
     root,
     scanned: files.length,
@@ -63,12 +69,16 @@ export function indexFolder(db, root, opts = {}) {
       continue;
     }
 
-    const chunks = chunkText(extracted.text);
-    if (!chunks.length) {
+    const pieces = chunkText(extracted.text);
+    if (!pieces.length) {
       if (existing) deleteFile(db, path);
       summary.unsupported += 1;
       continue;
     }
+
+    const chunks = embedder
+      ? pieces.map((content) => ({ content, embedding: embedder(content) }))
+      : pieces.map((content) => ({ content }));
 
     try {
       if (existing) deleteFile(db, path);
@@ -80,6 +90,7 @@ export function indexFolder(db, root, opts = {}) {
         mtime,
         sha256: sha256(path),
         status: "indexed",
+        source: extracted.extractor,
         chunks,
       });
       if (existing) summary.updated += 1;
