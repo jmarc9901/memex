@@ -1,0 +1,20 @@
+{
+  "name": "memex",
+  "version": "0.1.0",
+  "description": "Memex Offline - tu buscador personal 100% offline (full-text + FTS5, sin LLM, sin GPU)",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "bin": {
+    "memex": "./bin/memex.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "files": [
+    "bin",
+    "src"
+  ]
+}
