@@ -366,7 +366,7 @@ export function getTrailGraph(db, name) {
     .all(trail.id);
   const edges = db
     .prepare(
-      `SELECT e.id, e.label, e.from_file AS from, e.to_file AS to
+      `SELECT e.id, e.label, e.from_file AS "from", e.to_file AS "to"
        FROM trail_edges e WHERE e.trail_id = ?`
     )
     .all(trail.id);

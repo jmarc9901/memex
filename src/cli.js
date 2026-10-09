@@ -5,6 +5,16 @@ import { indexFolder } from "./indexer.js";
 import { hybridSearch } from "./search.js";
 import { createEmbedder } from "./embeddings.js";
 import { loadConfig } from "./config.js";
+import {
+  addToTrail,
+  ensureTrail,
+  linkInTrail,
+  listTrails,
+  relate,
+  removeTrail,
+  showTrail,
+  toD3,
+} from "./trails.js";
 
 const HELP = `Memex Offline - buscador personal 100% offline (SQLite FTS5 + embeddings en CPU)
 
@@ -13,6 +23,13 @@ Uso:
   memex search <consulta> [--mode hybrid|lexical|semantic] [-n N] [--any] [--json]
   memex stats [--json]
   memex clear
+  memex relate <ref> [-n N] [--json]
+  memex trails [--json]
+  memex trail create <nombre> [--desc TEXTO]
+  memex trail add <nombre> <ref...> [--note TEXTO]
+  memex trail link <nombre> <ref1> <ref2> [--label TEXTO]
+  memex trail show <nombre> [--json]
+  memex trail rm <nombre>
 
 Opciones:
   --db RUTA     Base de datos del indice (por defecto ./.memex/index.db o $MEMEX_DB)
@@ -68,6 +85,9 @@ export function parseArgs(argv) {
       case "--limit":
       case "-n": flags.limit = Number(value()); break;
       case "--mode": flags.mode = value(); break;
+      case "--desc": flags.desc = value(); break;
+      case "--note": flags.note = value(); break;
+      case "--label": flags.label = value(); break;
       case "--force": flags.force = true; break;
       case "--no-embed": flags.noEmbed = true; break;
       case "--any": flags.any = true; break;
@@ -113,6 +133,12 @@ export async function run(argv, io = {}) {
       return cmdStats({ out, color, flags, dbPath });
     case "clear":
       return cmdClear({ out, color, dbPath });
+    case "relate":
+      return cmdRelate({ out, color, flags, dbPath });
+    case "trails":
+      return cmdTrailsList({ out, color, flags, dbPath });
+    case "trail":
+      return cmdTrail({ out, color, flags, dbPath });
     default:
       throw new Error(`comando desconocido: ${command} (usa --help)`);
   }
@@ -224,6 +250,114 @@ function cmdClear({ out, color, dbPath }) {
   clear(db);
   db.close();
   out.write(`${color.green("✓")} Indice vaciado ${color.dim(dbPath)}\n`);
+}
+
+function cmdTrailsList({ out, color, flags, dbPath }) {
+  const db = openDatabase(dbPath);
+  const trails = listTrails(db);
+  db.close();
+  if (flags.json) {
+    out.write(JSON.stringify(trails, null, 2) + "\n");
+    return;
+  }
+  if (!trails.length) {
+    out.write(`${color.yellow("No hay trails")}. Crea uno con: memex trail create <nombre>\n`);
+    return;
+  }
+  out.write(`${color.bold(String(trails.length))} trail(s):\n`);
+  for (const t of trails) {
+    out.write(
+      `  ${color.green(t.name)} ${color.dim(`${t.nodes} nodos, ${t.edges} enlaces`)}` +
+        (t.description ? `  ${color.dim(t.description)}` : "") +
+        "\n"
+    );
+  }
+}
+
+function cmdTrail({ out, color, flags, dbPath }) {
+  const [sub, name, ...rest] = flags._.slice(1);
+  const config = loadConfig();
+  const embedder = createEmbedder(config);
+  const db = openDatabase(dbPath);
+  try {
+    if (sub === "create") {
+      if (!name) throw new Error("falta el nombre del trail");
+      ensureTrail(db, name, flags.desc ?? "");
+      out.write(`${color.green("✓")} Trail ${color.bold(name)} listo\n`);
+      return;
+    }
+    if (sub === "add") {
+      if (!name) throw new Error("uso: memex trail add <nombre> <ref...>");
+      const refs = rest.length ? rest : [];
+      if (!refs.length) throw new Error("indica al menos una ruta o consulta");
+      for (const ref of refs) {
+        const res = addToTrail(db, { trail: name, ref, note: flags.note, embedder });
+        if (res.ok) out.write(`  + ${color.cyan(res.file.name)} ${color.dim(res.file.path)}\n`);
+        else out.write(`  ${color.red("✗")} ${ref}: ${res.reason}\n`);
+      }
+      return;
+    }
+    if (sub === "link") {
+      if (!name || rest.length < 2) throw new Error("uso: memex trail link <nombre> <ref1> <ref2>");
+      const res = linkInTrail(db, { trail: name, from: rest[0], to: rest[1], label: flags.label, embedder });
+      if (!res.ok) throw new Error(res.reason);
+      out.write(`${color.green("✓")} Enlace creado en ${color.bold(name)}\n`);
+      return;
+    }
+    if (sub === "show") {
+      if (!name) throw new Error("uso: memex trail show <nombre>");
+      const graph = showTrail(db, name);
+      if (!graph) throw new Error(`no existe el trail: ${name}`);
+      if (flags.json) {
+        out.write(JSON.stringify(toD3(graph), null, 2) + "\n");
+        return;
+      }
+      out.write(`${color.bold(graph.trail.name)} ${color.dim(graph.trail.description || "")}\n`);
+      graph.nodes.forEach((n, i) => {
+        out.write(`  ${String(i + 1).padStart(2)}. ${n.name} ${color.dim(n.path)}${n.note ? `  ${color.yellow(n.note)}` : ""}\n`);
+      });
+      if (graph.edges.length) {
+        out.write("  enlaces:\n");
+        for (const e of graph.edges) {
+          out.write(`    ${e.from} -> ${e.to}${e.label ? ` (${e.label})` : ""}\n`);
+        }
+      }
+      return;
+    }
+    if (sub === "rm" || sub === "remove") {
+      if (!name) throw new Error("uso: memex trail rm <nombre>");
+      removeTrail(db, name);
+      out.write(`${color.green("✓")} Trail ${name} eliminado\n`);
+      return;
+    }
+    throw new Error(`subcomando desconocido: ${sub ?? "(ninguno)"}`);
+  } finally {
+    db.close();
+  }
+}
+
+function cmdRelate({ out, color, flags, dbPath }) {
+  const ref = flags._.slice(1).join(" ").trim();
+  if (!ref) throw new Error("uso: memex relate <ruta|consulta>");
+  const limit = Number.isFinite(flags.limit) ? flags.limit : 10;
+  const config = loadConfig();
+  const embedder = createEmbedder(config);
+  const db = openDatabase(dbPath);
+  const results = relate(db, ref, { limit, embedder });
+  db.close();
+
+  if (flags.json) {
+    out.write(JSON.stringify({ ref, results }, null, 2) + "\n");
+    return;
+  }
+  if (!results.length) {
+    out.write(`${color.yellow("Sin relaciones")} (indexa con embeddings activados).\n`);
+    return;
+  }
+  out.write(`${color.bold("Documentos relacionados")} con ${color.cyan(ref)}\n`);
+  for (const r of results) {
+    out.write(`  ${color.green(r.score.toFixed(3))}  ${r.name}  ${color.dim(r.path)}\n`);
+  }
 }
 
 function shorten(path, max) {
