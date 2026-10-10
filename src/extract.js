@@ -58,7 +58,6 @@ export function walkFiles(root, opts = {}) {
       return;
     }
     for (const entry of entries) {
-      if (entry.name.startsWith(".") && ignore.has(entry.name)) continue;
       if (ignore.has(entry.name)) continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -83,8 +82,8 @@ export function extractText(path) {
   const ext = extname(path).toLowerCase();
 
   if (PDF_EXTENSIONS.has(ext)) {
-    const text = extractPdf(path);
-    return text ? { text, extractor: "pdftotext" } : null;
+    const pdf = extractPdf(path);
+    return pdf ? { text: pdf.text, extractor: pdf.extractor } : null;
   }
 
   if (IMAGE_EXTENSIONS.has(ext)) {
@@ -121,17 +120,17 @@ function looksBinary(buf) {
 /**
  * Intenta extraer texto de un PDF usando herramientas externas si existen.
  * Sin dependencias npm: usa `pdftotext` (poppler) o `mutool` (mupdf).
- * @returns {string|null}
+ * @returns {{text:string, extractor:string}|null}
  */
 export function extractPdf(path) {
   const tools = [
-    { cmd: "pdftotext", args: ["-q", path, "-"] },
-    { cmd: "mutool", args: ["draw", "-F", "text", path] },
+    { cmd: "pdftotext", extractor: "pdftotext", args: ["-q", path, "-"] },
+    { cmd: "mutool", extractor: "mutool", args: ["draw", "-F", "text", path] },
   ];
-  for (const { cmd, args } of tools) {
+  for (const { cmd, extractor, args } of tools) {
     const res = spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     if (res.error) continue; // herramienta no instalada
-    if (res.status === 0 && res.stdout && res.stdout.trim()) return res.stdout;
+    if (res.status === 0 && res.stdout && res.stdout.trim()) return { text: res.stdout, extractor };
   }
   return null;
 }

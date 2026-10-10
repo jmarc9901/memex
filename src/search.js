@@ -5,6 +5,11 @@ import { buildMatch } from "./query.js";
 import { cosine, fromBlob, tokenize } from "./embeddings.js";
 
 const RRF_K = 60;
+// Similitud coseno minima para aceptar un candidato semantico. Los embeddings
+// por feature hashing dan valores bajos (~0.02-0.06) a textos sin relacion,
+// mientras que las coincidencias reales superan ~0.20; el umbral elimina ruido
+// sin descartar coincidencias reales.
+const SEMANTIC_MIN_SCORE = 0.1;
 
 /**
  * @typedef {Object} SearchHit
@@ -25,18 +30,20 @@ const RRF_K = 60;
  * Busca en el indice combinando recuperacion lexica y semantica.
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {string} queryText
- * @param {{mode?:'lexical'|'semantic'|'hybrid', limit?:number, embedder?:((t:string)=>Float32Array)|null, weights?:{lexical?:number,semantic?:number}}} [opts]
+ * @param {{mode?:'lexical'|'semantic'|'hybrid', limit?:number, any?:boolean, minScore?:number, embedder?:((t:string)=>Float32Array)|null, weights?:{lexical?:number,semantic?:number}}} [opts]
  * @returns {SearchHit[]}
  */
 export function hybridSearch(db, queryText, opts = {}) {
   const mode = opts.mode ?? "hybrid";
   const limit = Math.max(1, opts.limit ?? 20);
+  const any = opts.any ?? false;
+  const minScore = opts.minScore ?? SEMANTIC_MIN_SCORE;
   const weights = { lexical: 1, semantic: 1, ...(opts.weights ?? {}) };
   const candidates = Math.max(limit * 5, 50);
 
-  const lexical = mode === "semantic" ? [] : lexicalHits(db, queryText, candidates);
+  const lexical = mode === "semantic" ? [] : lexicalHits(db, queryText, candidates, any);
   const semantic =
-    mode === "lexical" ? [] : semanticHits(db, queryText, candidates, opts.embedder);
+    mode === "lexical" ? [] : semanticHits(db, queryText, candidates, opts.embedder, minScore);
 
   if (mode === "lexical") return lexical.slice(0, limit);
   if (mode === "semantic") return semantic.slice(0, limit);
@@ -44,10 +51,10 @@ export function hybridSearch(db, queryText, opts = {}) {
   return fuse(lexical, semantic, weights).slice(0, limit);
 }
 
-function lexicalHits(db, queryText, candidates) {
+function lexicalHits(db, queryText, candidates, any = false) {
   let match;
   try {
-    match = buildMatch(queryText);
+    match = buildMatch(queryText, { any });
   } catch {
     return [];
   }
@@ -65,7 +72,7 @@ function lexicalHits(db, queryText, candidates) {
   }));
 }
 
-function semanticHits(db, queryText, candidates, embedder) {
+function semanticHits(db, queryText, candidates, embedder, minScore = SEMANTIC_MIN_SCORE) {
   if (!embedder) return [];
   const queryVec = embedder(queryText);
   const rows = chunksWithEmbeddings(db);
@@ -76,7 +83,7 @@ function semanticHits(db, queryText, candidates, embedder) {
     const vec = fromBlob(row.embedding);
     if (!vec) continue;
     const score = cosine(queryVec, vec);
-    if (score > 0) scored.push({ row, score });
+    if (score >= minScore) scored.push({ row, score });
   }
   scored.sort((a, b) => b.score - a.score);
 

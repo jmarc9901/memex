@@ -103,16 +103,19 @@ export function createEmbedder(config = {}) {
 
   if (provider === "onnx") {
     // Carga diferida: solo si el usuario instalo onnxruntime-node.
+    const require = createRequire(import.meta.url);
+    let onnxInstalled = true;
     try {
-      // eslint-disable-next-line no-eval
-      const require = createRequire(import.meta.url);
       require("onnxruntime-node");
+    } catch {
+      // onnxruntime-node no instalado: caemos al proveedor hash sin fallar.
+      onnxInstalled = false;
+    }
+    if (onnxInstalled) {
       throw new Error(
-        "proveedor onnx detectado pero no configurado: define un modelo y adapta createEmbedder"
+        'proveedor "onnx": onnxruntime-node esta instalado pero aun no hay un modelo configurado. ' +
+          "Define el modelo y adapta createEmbedder, o usa embed_provider=\"hash\"."
       );
-    } catch (e) {
-      if (String(e.message).includes("no configurado")) throw e;
-      // onnxruntime-node no instalado: caemos al proveedor hash.
     }
   }
 

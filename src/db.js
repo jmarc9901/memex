@@ -263,17 +263,15 @@ export function embeddedChunkCount(db) {
 export function stats(db) {
   const files = db.prepare("SELECT COUNT(*) AS n FROM files").get().n;
   const chunks = db.prepare("SELECT COUNT(*) AS n FROM chunks").get().n;
-  const skipped = db
-    .prepare("SELECT COUNT(*) AS n FROM files WHERE status != 'indexed'")
-    .get().n;
   const embedded = embeddedChunkCount(db);
+  const trails = db.prepare("SELECT COUNT(*) AS n FROM trails").get().n;
   const byExt = db
     .prepare(
       `SELECT ext, COUNT(*) AS n FROM files
        GROUP BY ext ORDER BY n DESC, ext ASC LIMIT 15`
     )
     .all();
-  return { files, chunks, skipped, embedded, byExt };
+  return { files, chunks, embedded, trails, byExt };
 }
 
 /** Limpia todo el indice (documentos, chunks y trails). */

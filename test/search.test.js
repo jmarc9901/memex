@@ -65,3 +65,21 @@ test("modos lexical, semantic e hybrid devuelven resultados coherentes", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("el umbral semantico descarta coincidencias sin relacion", () => {
+  const root = makeCorpus();
+  const db = openDatabase(join(root, ".memex", "index.db"));
+  const embedder = createEmbedder({ embed_provider: "hash", embed_dim: 256 });
+  try {
+    indexFolder(db, root, { embedder });
+    const semantic = hybridSearch(db, "ansiedad", { mode: "semantic", embedder });
+    assert.ok(semantic.length >= 1);
+    assert.ok(
+      semantic.every((r) => r.name === "diario.md"),
+      "la receta no deberia aparecer como coincidencia semantica"
+    );
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
