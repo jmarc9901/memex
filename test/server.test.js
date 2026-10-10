@@ -134,3 +134,14 @@ test("sirve la GUI estatica y rechaza rutas desconocidas", async () => {
     assert.equal(nope.status, 404);
   });
 });
+
+test("GET /api/tools informa herramientas y configuracion", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/tools`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.ok(Array.isArray(data.tools) && data.tools.length >= 5);
+    assert.equal(typeof data.capabilities.pdf, "boolean");
+    assert.equal(data.config.embed_provider, "hash");
+  });
+});

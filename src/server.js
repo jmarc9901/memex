@@ -10,6 +10,7 @@ import { loadConfig } from "./config.js";
 import { indexFolder, saveDocument } from "./indexer.js";
 import { addToTrail, linkInTrail, listTrails, showTrail, relate, toD3 } from "./trails.js";
 import { ask } from "./rag.js";
+import { toolStatus, configStatus, capabilitySummary } from "./doctor.js";
 
 const WEB_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "web");
 
@@ -130,6 +131,11 @@ async function handleApi(req, res, url, { db, embedder, config }) {
     if (!body.path) return sendJson(res, 400, { error: "falta path" });
     const summary = indexFolder(db, body.path, { embedder });
     return sendJson(res, 200, summary);
+  }
+
+  if (req.method === "GET" && path === "/api/tools") {
+    const tools = toolStatus();
+    return sendJson(res, 200, { tools, capabilities: capabilitySummary(tools), config: configStatus(config) });
   }
 
   if (req.method === "GET" && path === "/api/config") {

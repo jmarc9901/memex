@@ -288,9 +288,38 @@ $("#index-form").addEventListener("submit", async (event) => {
 });
 
 // ---------------------------------------------------------------------------
+// Herramientas opcionales (/api/tools)
+// ---------------------------------------------------------------------------
+
+async function loadTools() {
+  const list = "#tools-list";
+  const box = $(list);
+  const summary = $("#tools-summary");
+  try {
+    const data = await api("/api/tools");
+    const cap = data.capabilities;
+    summary.textContent =
+      `PDF ${cap.pdf ? "si" : "no"} · OCR ${cap.ocr ? "si" : "no"} · transcripción ${cap.transcription ? "si" : "no"}` +
+      ` · embeddings ${data.config.embed_provider} (dim ${data.config.embed_dim})` +
+      ` · RAG ${data.config.rag_enabled ? "activado" : "desactivado"}`;
+    box.innerHTML = data.tools
+      .map(
+        (t) => `<div class="tool" title="${escapeHtml(t.purpose)}${t.env ? ` · ${escapeHtml(t.env)}` : ""}">
+          <span class="${t.available ? "ok" : "off"}">${t.available ? "✓" : "✗"}</span>
+          <span>${escapeHtml(t.name)}</span>
+        </div>`
+      )
+      .join("");
+  } catch (err) {
+    box.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Arranque
 // ---------------------------------------------------------------------------
 
 refreshStatus();
 refreshTrails();
+loadTools();
 setInterval(refreshStatus, 15000);

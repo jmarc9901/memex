@@ -8,6 +8,8 @@ import { createEmbedder } from "./embeddings.js";
 import { loadConfig } from "./config.js";
 import { ask } from "./rag.js";
 import { startServer } from "./server.js";
+import { toolStatus, configStatus, capabilitySummary } from "./doctor.js";
+import { benchmark } from "./bench.js";
 import {
   addToTrail,
   ensureTrail,
@@ -28,6 +30,8 @@ Uso:
   memex export <consulta> [--format jsonl|csv|md] [-o ARCHIVO] [-n N] [--any] [--mode MODO]
   memex relate <ref> [-n N] [--json]
   memex serve [--host H] [--port N] [--db RUTA]
+  memex doctor [--json]
+  memex bench [carpeta] [consulta...] [-n N] [--no-embed] [--json]
   memex stats [--json]
   memex clear
   memex trails [--json]
@@ -155,6 +159,10 @@ export async function run(argv, io = {}) {
       return cmdExport({ out, color, flags, dbPath });
     case "serve":
       return cmdServe({ out, color, flags, dbPath });
+    case "doctor":
+      return cmdDoctor({ out, color, flags });
+    case "bench":
+      return cmdBench({ out, color, flags });
     case "stats":
       return cmdStats({ out, color, flags, dbPath });
     case "clear":
@@ -372,6 +380,78 @@ function cmdServe({ out, color, flags, dbPath }) {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   return handle.close;
+}
+
+function cmdDoctor({ out, color, flags }) {
+  const config = loadConfig();
+  const tools = toolStatus();
+  const caps = capabilitySummary(tools);
+  const cfg = configStatus(config);
+
+  if (flags.json) {
+    out.write(JSON.stringify({ tools, capabilities: caps, config: cfg }, null, 2) + "\n");
+    return;
+  }
+
+  out.write(`${color.bold("Herramientas opcionales")}\n`);
+  for (const tool of tools) {
+    const mark = tool.available ? color.green("✓") : color.dim("✗");
+    const env = tool.env ? color.dim(` [${tool.env}]`) : "";
+    out.write(`  ${mark} ${tool.name.padEnd(12)} ${color.dim(tool.purpose)}${env}\n`);
+  }
+  out.write(`\n${color.bold("Capacidades")}\n`);
+  out.write(
+    `  PDF           : ${yesNo(caps.pdf, color)}\n` +
+      `  OCR           : ${yesNo(caps.ocr, color)}\n` +
+      `  transcripcion : ${yesNo(caps.transcription, color)}\n`
+  );
+  out.write(`\n${color.bold("Configuracion")}\n`);
+  out.write(`  embeddings : ${cfg.embed_provider} (dim ${cfg.embed_dim})\n`);
+  out.write(
+    `  RAG        : ${cfg.rag_enabled ? color.green("activado") : color.dim("desactivado")}` +
+      `${cfg.rag_provider ? color.dim(` (${cfg.rag_provider}${cfg.rag_model ? ` / ${cfg.rag_model}` : ""})`) : ""}\n`
+  );
+  out.write(`  OCR idioma : ${cfg.ocr_lang}\n`);
+  out.write(`  modelo STT : ${cfg.whisper_model ?? color.dim("(sin definir)")}\n`);
+}
+
+function yesNo(value, color) {
+  return value ? color.green("si") : color.yellow("no");
+}
+
+function cmdBench({ out, color, flags }) {
+  const root = flags._[1] ? resolve(flags._[1]) : process.cwd();
+  const queries = flags._.slice(2);
+  const config = loadConfig();
+  const embedder = flags.noEmbed ? null : createEmbedder(config);
+  const limit = Number.isFinite(flags.limit) ? flags.limit : 10;
+  const r = benchmark(root, { embedder, queries, limit });
+
+  if (flags.json) {
+    out.write(JSON.stringify(r, null, 2) + "\n");
+    return;
+  }
+
+  out.write(`${color.bold("Benchmark")} ${color.dim(r.root)}\n`);
+  out.write(`  archivos escaneados : ${r.scanned}\n`);
+  out.write(`  indexados           : ${r.indexed}\n`);
+  out.write(`  fragmentos          : ${r.chunks} (${r.embedded} con vector)\n`);
+  out.write(
+    `  indexado            : ${r.index_ms} ms ${color.dim(`(${r.files_per_s ?? "-"} archivos/s)`)}` +
+      ` ${color.dim("· indice desechable")}\n`
+  );
+  out.write(
+    `  busqueda (mediana)  : ${r.search_ms.median} ms ` +
+      `${color.dim(`min ${r.search_ms.min} / max ${r.search_ms.max}, ${r.search_ms.count} consultas`)}` +
+      `${r.mode ? color.dim(` [${r.mode}]`) : ""}\n`
+  );
+  out.write(`  memoria (RSS)       : ${r.rss_mb} MB\n`);
+  if (r.queries.length) {
+    out.write(`  consultas:\n`);
+    for (const q of r.queries) {
+      out.write(`    ${color.cyan(JSON.stringify(q.query))} -> ${q.hits} resultado(s) en ${q.ms} ms\n`);
+    }
+  }
 }
 
 function cmdStats({ out, color, flags, dbPath }) {

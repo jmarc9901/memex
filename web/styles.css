@@ -361,6 +361,44 @@ label.any {
   font-size: 13px;
 }
 
+.section-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin: 20px 0 6px;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-radius: var(--radius);
+  padding: 7px 11px;
+  font-size: 13px;
+}
+
+.tool .ok {
+  color: var(--accent);
+}
+
+.tool .off {
+  color: var(--muted);
+}
+
+.tool .purpose {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .log {
   background: var(--bg-elev);
   border: 1px solid var(--border);
