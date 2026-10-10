@@ -1,10 +1,13 @@
 // Memex Offline - interfaz de linea de comandos.
 import { resolve } from "node:path";
+import { writeFileSync } from "node:fs";
 import { openDatabase, stats, clear } from "./db.js";
 import { indexFolder } from "./indexer.js";
 import { hybridSearch } from "./search.js";
 import { createEmbedder } from "./embeddings.js";
 import { loadConfig } from "./config.js";
+import { ask } from "./rag.js";
+import { startServer } from "./server.js";
 import {
   addToTrail,
   ensureTrail,
@@ -21,9 +24,12 @@ const HELP = `Memex Offline - buscador personal 100% offline (SQLite FTS5 + embe
 Uso:
   memex index [carpeta] [--force] [--no-embed] [--db RUTA]
   memex search <consulta> [--mode hybrid|lexical|semantic] [-n N] [--any] [--json]
+  memex ask <pregunta> [-n N] [--json]
+  memex export <consulta> [--format jsonl|csv|md] [-o ARCHIVO] [-n N] [--any] [--mode MODO]
+  memex relate <ref> [-n N] [--json]
+  memex serve [--host H] [--port N] [--db RUTA]
   memex stats [--json]
   memex clear
-  memex relate <ref> [-n N] [--json]
   memex trails [--json]
   memex trail create <nombre> [--desc TEXTO]
   memex trail add <nombre> <ref...> [--note TEXTO]
@@ -38,12 +44,19 @@ Opciones:
   --mode MODO   hybrid (defecto), lexical o semantic
   -n, --limit   Numero maximo de resultados (por defecto 20)
   --any         Une los terminos con OR en vez de AND
+  --format FMT  Formato de export: jsonl (defecto), csv o md
+  -o, --out     Archivo de salida para export (por defecto stdout)
+  --host H      Host del servidor (por defecto 127.0.0.1)
+  --port N      Puerto del servidor (por defecto 4747 o $MEMEX_PORT)
   --json        Salida en JSON
   -h, --help    Muestra esta ayuda
 
 Ejemplos:
   memex index ~/Documentos
   memex search "como me sentia" --mode semantic
+  memex ask "que conclusiones saque del proyecto x"
+  memex export "ansiedad" --format csv -o ansiedad.csv
+  memex serve --port 4747
   memex search '"proyecto x" 2024' --json`;
 
 const COLORS = {
@@ -68,7 +81,9 @@ function makeColor(useColor) {
   };
 }
 
-const VALUE_FLAGS = new Set(["--db", "--limit", "-n", "--mode"]);
+const VALUE_FLAGS = new Set([
+  "--db", "--limit", "-n", "--mode", "--format", "-o", "--out", "--host", "--port",
+]);
 
 /** Parser de argumentos sencillo y sin dependencias. */
 export function parseArgs(argv) {
@@ -85,6 +100,11 @@ export function parseArgs(argv) {
       case "--limit":
       case "-n": flags.limit = Number(value()); break;
       case "--mode": flags.mode = value(); break;
+      case "--format": flags.format = value(); break;
+      case "--out":
+      case "-o": flags.out = value(); break;
+      case "--host": flags.host = value(); break;
+      case "--port": flags.port = Number(value()); break;
       case "--desc": flags.desc = value(); break;
       case "--note": flags.note = value(); break;
       case "--label": flags.label = value(); break;
@@ -129,6 +149,12 @@ export async function run(argv, io = {}) {
     case "search":
     case "find":
       return cmdSearch({ out, color, flags, dbPath });
+    case "ask":
+      return cmdAsk({ out, color, flags, dbPath });
+    case "export":
+      return cmdExport({ out, color, flags, dbPath });
+    case "serve":
+      return cmdServe({ out, color, flags, dbPath });
     case "stats":
       return cmdStats({ out, color, flags, dbPath });
     case "clear":
@@ -193,7 +219,7 @@ function cmdSearch({ out, color, flags, dbPath }) {
   const db = openDatabase(dbPath);
   const limit = Number.isFinite(flags.limit) ? flags.limit : 20;
   const started = Date.now();
-  const rows = hybridSearch(db, queryText, { mode, limit, embedder });
+  const rows = hybridSearch(db, queryText, { mode, limit, any: Boolean(flags.any), embedder });
   const elapsed = Date.now() - started;
   db.close();
 
@@ -224,6 +250,130 @@ function cmdSearch({ out, color, flags, dbPath }) {
   });
 }
 
+async function cmdAsk({ out, color, flags, dbPath }) {
+  const question = flags._.slice(1).join(" ").trim();
+  if (!question) throw new Error('falta la pregunta. Ej: memex ask "que conclusiones saque"');
+
+  const limit = Number.isFinite(flags.limit) ? flags.limit : 6;
+  const config = loadConfig();
+  const embedder = createEmbedder(config);
+  const db = openDatabase(dbPath);
+  const started = Date.now();
+  const result = await ask(db, question, { config, embedder, limit });
+  const elapsed = Date.now() - started;
+  db.close();
+
+  if (flags.json) {
+    out.write(JSON.stringify({ question, ...result, took_ms: elapsed }, null, 2) + "\n");
+    return;
+  }
+
+  if (result.answer) {
+    out.write(`${color.bold("Respuesta")} ${color.dim(`(${result.model ?? "modelo"}, ${elapsed} ms)`)}:\n\n`);
+    out.write(result.answer + "\n\n");
+  } else if (result.error) {
+    out.write(`${color.red("✗")} No se pudo generar la respuesta: ${result.error}\n`);
+    out.write(`${color.dim("Fragmentos recuperados (modo offline):")}\n\n`);
+  } else {
+    out.write(`${color.yellow("Modo offline")} ${color.dim("(sin proveedor RAG configurado)")}\n`);
+    out.write(`Fragmentos mas relevantes para ${color.cyan(question)}:\n\n`);
+  }
+
+  if (!result.context.length) {
+    out.write(`${color.dim("No hay fragmentos en el indice. Indexa una carpeta primero.")}\n`);
+    return;
+  }
+  for (const c of result.context) {
+    out.write(`${color.green(`[${c.n}]`)} ${color.bold(c.name)} ${color.dim(c.path)}\n    ${c.text}\n\n`);
+  }
+}
+
+function cmdExport({ out, color, flags, dbPath }) {
+  const queryText = flags._.slice(1).join(" ").trim();
+  if (!queryText) throw new Error('falta la consulta. Ej: memex export "ansiedad"');
+
+  const format = flags.format ?? "jsonl";
+  if (!["jsonl", "csv", "md"].includes(format)) {
+    throw new Error(`formato invalido: ${format} (usa jsonl, csv o md)`);
+  }
+
+  const mode = flags.mode ?? "hybrid";
+  const config = loadConfig();
+  const embedder = mode === "lexical" ? null : createEmbedder(config);
+  const db = openDatabase(dbPath);
+  const limit = Number.isFinite(flags.limit) ? flags.limit : 20;
+  const rows = hybridSearch(db, queryText, { mode, limit, any: Boolean(flags.any), embedder });
+  db.close();
+
+  const payload = formatExport(rows, { query: queryText, mode, format });
+  if (flags.out) {
+    writeFileSync(resolve(flags.out), payload, "utf8");
+    out.write(`${color.green("✓")} ${rows.length} resultado(s) exportados a ${color.dim(resolve(flags.out))}\n`);
+    return;
+  }
+  out.write(payload.endsWith("\n") ? payload : payload + "\n");
+}
+
+/** Serializa resultados de busqueda a jsonl, csv o markdown. */
+export function formatExport(rows, { query = "", mode = "hybrid", format = "jsonl" } = {}) {
+  if (format === "jsonl") {
+    return rows.map((r) => JSON.stringify({ ...r, query })).join("\n");
+  }
+  if (format === "csv") {
+    const head = ["rank", "name", "path", "ext", "chunk_index", "score", "snippet"];
+    const lines = [head.join(",")];
+    rows.forEach((r, i) => {
+      lines.push(
+        [i + 1, r.name, r.path, r.ext, r.chunk_index, r.score, stripMarkers(r.snippet)]
+          .map(csvCell)
+          .join(",")
+      );
+    });
+    return lines.join("\n");
+  }
+  // markdown
+  const lines = [`# Memex export`, "", `Consulta: \`${query}\` (${mode}) - ${rows.length} resultados`, ""];
+  rows.forEach((r, i) => {
+    lines.push(`## ${i + 1}. ${r.name}`);
+    lines.push("");
+    lines.push(`\`${r.path}\` - score ${Number(r.score).toFixed(4)}`);
+    lines.push("");
+    lines.push(stripMarkers(r.snippet));
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+
+function csvCell(value) {
+  const s = value === null || value === undefined ? "" : String(value);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function stripMarkers(text) {
+  return String(text ?? "").replace(/\[\[(.+?)\]\]/g, "$1").replace(/\s+/g, " ").trim();
+}
+
+function cmdServe({ out, color, flags, dbPath }) {
+  const host = flags.host;
+  const port = Number.isFinite(flags.port) ? flags.port : undefined;
+  const handle = startServer({
+    dbPath,
+    host,
+    port,
+    onListen: ({ host: h, port: p }) => {
+      out.write(`${color.green("✓")} Memex escuchando en ${color.bold(`http://${h}:${p}`)}\n`);
+      out.write(`  ${color.dim(`indice: ${dbPath}`)}\n`);
+      out.write(`  ${color.dim("Ctrl+C para detener")}\n`);
+    },
+  });
+  const stop = () => {
+    handle.close().then(() => process.exit(0));
+  };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  return handle.close;
+}
+
 function cmdStats({ out, color, flags, dbPath }) {
   const db = openDatabase(dbPath);
   const s = stats(db);
@@ -237,7 +387,7 @@ function cmdStats({ out, color, flags, dbPath }) {
       `  archivos   : ${s.files}\n` +
       `  fragmentos : ${s.chunks}\n` +
       `  con vector : ${s.embedded}\n` +
-      `  omitidos   : ${s.skipped}\n`
+      `  trails     : ${s.trails}\n`
   );
   if (s.byExt.length) {
     out.write("  por extension:\n");
