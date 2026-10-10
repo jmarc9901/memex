@@ -4,6 +4,7 @@ import { extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { IMAGE_EXTENSIONS, ocrImage } from "./ocr.js";
 import { MEDIA_EXTENSIONS, transcribeMedia } from "./media.js";
+import { ARCHIVE_EXTENSIONS, readZip, gunzipText } from "./archive.js";
 
 export const TEXT_EXTENSIONS = new Set([
   ".txt", ".md", ".markdown", ".rst", ".org", ".log", ".csv", ".tsv",
@@ -29,6 +30,7 @@ export const SUPPORTED_EXTENSIONS = new Set([
   ...PDF_EXTENSIONS,
   ...IMAGE_EXTENSIONS,
   ...MEDIA_EXTENSIONS,
+  ...ARCHIVE_EXTENSIONS,
 ]);
 
 export const DEFAULT_IGNORES = new Set([
@@ -96,6 +98,10 @@ export function extractText(path) {
     return text ? { text, extractor: "whisper" } : null;
   }
 
+  if (ARCHIVE_EXTENSIONS.has(ext)) {
+    return extractArchive(path, ext);
+  }
+
   let buf;
   try {
     buf = readFileSync(path);
@@ -133,6 +139,48 @@ export function extractPdf(path) {
     if (res.status === 0 && res.stdout && res.stdout.trim()) return { text: res.stdout, extractor };
   }
   return null;
+}
+
+/**
+ * Extrae el texto de un archivo comprimido (.zip o .gz). De un ZIP solo se
+ * indexan las entradas de texto/codigo soportadas; el resto se omite.
+ * @param {string} path
+ * @param {string} ext
+ * @returns {{text:string, extractor:string}|null}
+ */
+export function extractArchive(path, ext = extname(path).toLowerCase()) {
+  let buf;
+  try {
+    buf = readFileSync(path);
+  } catch {
+    return null;
+  }
+  if (buf.length === 0 || buf.length > MAX_FILE_BYTES) return null;
+
+  if (ext === ".gz") {
+    const text = gunzipText(buf);
+    if (text === null) return null;
+    if (!text.trim() || looksBinary(Buffer.from(text).subarray(0, 1024))) return null;
+    return { text, extractor: "gzip" };
+  }
+
+  let entries;
+  try {
+    entries = readZip(buf);
+  } catch {
+    return null;
+  }
+
+  const parts = [];
+  for (const entry of entries) {
+    const inner = extname(entry.name).toLowerCase();
+    if (!TEXT_EXTENSIONS.has(inner) && !CODE_EXTENSIONS.has(inner)) continue;
+    if (looksBinary(entry.data)) continue;
+    const content = entry.data.toString("utf8").trim();
+    if (content) parts.push(`--- ${entry.name} ---\n${content}`);
+  }
+  if (!parts.length) return null;
+  return { text: parts.join("\n\n"), extractor: "zip" };
 }
 
 /**
