@@ -69,7 +69,8 @@ Proveedores con tiers gratuitos que encajan:
 | Cloudflare Workers AI | 10.000 neuronas/día | sin tarjeta de crédito |
 
 También vale cualquier endpoint local compatible con OpenAI (`llama.cpp`,
-`Ollama`, `LM Studio`) vía `base_url`, en cuyo caso no se necesita clave.
+`Ollama`, `LM Studio`), ya sea indicando `base_url` o usando los presets
+`llamacpp`, `ollama` y `lmstudio`; en ese caso no se necesita clave.
 
 ### Ruta 3 — LLM local ultraligera (futuro)
 

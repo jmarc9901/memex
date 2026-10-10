@@ -87,7 +87,10 @@ node bin/memex.js export "ansiedad" --format csv -o ansiedad.csv
 node bin/memex.js trail create proyecto-x --desc "cómo llegué a las conclusiones"
 node bin/memex.js trail add proyecto-x ~/notas/proyecto.md --note "borrador"
 node bin/memex.js trail link proyecto-x ~/notas/proyecto.md ~/notas/revision.md
-node bin/memex.js trail show proyecto-x --json   # grafo listo para D3
+node bin/memex.js trail show proyecto-x --json      # grafo listo para D3
+node bin/memex.js trail show proyecto-x --format mermaid  # diagrama Mermaid
+node bin/memex.js trail show proyecto-x --format dot      # Graphviz DOT
+node bin/memex.js trail show proyecto-x --format md       # Markdown
 node bin/memex.js serve --port 8080
 ```
 
@@ -98,7 +101,7 @@ GUI sin dependencias (HTML/CSS/JS vanilla) en `http://127.0.0.1:4747`:
 
 - **Buscar**: pestañas de modo, resaltado de coincidencias, OR opcional.
 - **Preguntar**: respuesta RAG con lista de fuentes citadas.
-- **Trails**: listar, abrir y añadir nodos a trails.
+- **Trails**: listar, abrir y añadir nodos; visualizar el grafo como SVG y descargarlo en DOT o Markdown (o copiar el diagrama Mermaid).
 - **Indexar**: lanzar el indexado de una carpeta y ver el resumen.
 
 La GUI se apoya en la misma API que consume la extensión:
@@ -108,7 +111,7 @@ La GUI se apoya en la misma API que consume la extensión:
 | `GET` | `/api/stats` | Estadísticas del índice. |
 | `GET` | `/api/search?q=&mode=&any=&limit=` | Búsqueda. |
 | `GET` | `/api/relate?ref=&limit=` | Documentos relacionados. |
-| `GET` | `/api/trails` · `/api/trails/:name` | Listar / ver un trail (grafo D3). |
+| `GET` | `/api/trails` · `/api/trails/:name?format=json\|dot\|mermaid\|md` | Listar / exportar un trail (D3 por defecto). |
 | `POST` | `/api/trails/:name` | Añadir nodo (`{ref,note}`) o enlace (`{from,to,label}`). |
 | `POST` | `/api/save` | Guardar un documento (`{url,title,text}`). |
 | `POST` | `/api/ask` | Pregunta RAG. |
@@ -144,6 +147,10 @@ El archivo de config se busca, por orden, en `$MEMEX_CONFIG`,
   "server": { "host": "127.0.0.1", "port": 4747 }
 }
 ```
+
+`rag.provider` acepta `openai-compatible`, `groq`, `openrouter` y los presets
+locales `ollama` (`127.0.0.1:11434`), `llamacpp` (`127.0.0.1:8080`) y `lmstudio`
+(`127.0.0.1:1234`). Los proveedores locales no necesitan `api_key`.
 
 Variables de entorno: `MEMEX_DB`, `MEMEX_CONFIG`, `MEMEX_EMBED_PROVIDER`,
 `MEMEX_EMBED_DIM`, `MEMEX_RAG_API_KEY`, `MEMEX_RAG_BASE_URL`,
