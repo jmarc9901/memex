@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Memex Offline</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%8D</text></svg>" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">🔍</span>
+        <div>
+          <h1>Memex Offline</h1>
+          <p class="tagline">Tu buscador personal, 100% offline</p>
+        </div>
+      </div>
+      <div class="status" id="status" title="Estado del servidor">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-text">conectando…</span>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="search" role="tab">Buscar</button>
+      <button class="tab" data-tab="ask" role="tab">Preguntar</button>
+      <button class="tab" data-tab="trails" role="tab">Trails</button>
+      <button class="tab" data-tab="index" role="tab">Indexar</button>
+    </nav>
+
+    <main>
+      <!-- BUSCAR -->
+      <section class="panel active" id="panel-search">
+        <form class="searchbar" id="search-form">
+          <input
+            id="search-input"
+            type="search"
+            placeholder="Palabras, &quot;frase exacta&quot; o prefijo*"
+            autocomplete="off"
+            autofocus
+          />
+          <select id="search-mode" title="Modo de búsqueda">
+            <option value="hybrid">híbrido</option>
+            <option value="lexical">léxico</option>
+            <option value="semantic">semántico</option>
+          </select>
+          <label class="any" title="Unir términos con OR">
+            <input type="checkbox" id="search-any" /> OR
+          </label>
+          <button type="submit">Buscar</button>
+        </form>
+        <p class="meta" id="search-meta"></p>
+        <div id="search-results" class="results"></div>
+      </section>
+
+      <!-- PREGUNTAR -->
+      <section class="panel" id="panel-ask">
+        <form class="searchbar" id="ask-form">
+          <input
+            id="ask-input"
+            type="text"
+            placeholder="Pregunta en lenguaje natural, p. ej. ¿qué conclusiones saqué del proyecto X?"
+            autocomplete="off"
+          />
+          <button type="submit">Preguntar</button>
+        </form>
+        <p class="meta" id="ask-meta"></p>
+        <div id="ask-answer" class="answer"></div>
+        <div id="ask-context" class="results"></div>
+      </section>
+
+      <!-- TRAILS -->
+      <section class="panel" id="panel-trails">
+        <div class="searchbar">
+          <input id="trail-name" type="text" placeholder="nombre del trail" autocomplete="off" />
+          <button type="button" id="trail-create">Crear / abrir</button>
+          <button type="button" id="trail-refresh" class="ghost">Refrescar</button>
+        </div>
+        <div class="trail-grid">
+          <div>
+            <h3>Trails existentes</h3>
+            <ul class="trail-list" id="trail-list"></ul>
+          </div>
+          <div>
+            <h3 id="trail-detail-title">Detalle</h3>
+            <div id="trail-detail" class="trail-detail"></div>
+            <form class="searchbar" id="trail-add-form" style="margin-top: 10px">
+              <input id="trail-ref" type="text" placeholder="ruta o consulta a añadir" autocomplete="off" />
+              <input id="trail-note" type="text" placeholder="nota (opcional)" autocomplete="off" style="max-width: 180px" />
+              <button type="submit">Añadir nodo</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- INDEXAR -->
+      <section class="panel" id="panel-index">
+        <form class="searchbar" id="index-form">
+          <input id="index-path" type="text" placeholder="ruta absoluta de la carpeta a indexar" autocomplete="off" />
+          <button type="submit">Indexar</button>
+        </form>
+        <pre class="log" id="index-log"></pre>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span id="footer-stats">—</span>
+      <span class="sep">·</span>
+      <span>sin nube · sin telemetría · sin GPU</span>
+    </footer>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

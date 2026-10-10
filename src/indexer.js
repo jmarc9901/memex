@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { basename, extname } from "node:path";
 import { walkFiles, extractText, chunkText, DEFAULT_IGNORES } from "./extract.js";
-import { deleteFile, getIndexedFile, insertFile, setMeta } from "./db.js";
+import { deleteFile, getIndexedFile, getFileByPath, insertFile, setMeta } from "./db.js";
 
 function sha256(path) {
   try {
@@ -101,4 +101,42 @@ export function indexFolder(db, root, opts = {}) {
   }
 
   return summary;
+}
+
+/**
+ * Guarda un documento en memoria (por ejemplo una pagina web enviada por la
+ * extension del navegador) directamente en el indice.
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @param {{url:string, title?:string, text:string, source?:string, embedder?:Function}} doc
+ * @returns {{file_id:number, chunks:number, updated:boolean}}
+ */
+export function saveDocument(db, doc) {
+  const { url, title = "", text, source = "web", embedder = null } = doc;
+  const path = url || title;
+  if (!path) throw new Error("saveDocument requiere url o title");
+
+  const body = title ? `${title}\n\n${text}` : text;
+  const pieces = chunkText(body);
+  const chunks = embedder
+    ? pieces.map((content) => ({ content, embedding: embedder(content) }))
+    : pieces.map((content) => ({ content }));
+
+  const existing = getFileByPath(db, path);
+  if (existing) deleteFile(db, path);
+
+  const now = Date.now();
+  insertFile(db, {
+    path,
+    name: title || path,
+    ext: ".web",
+    size: Buffer.byteLength(body, "utf8"),
+    mtime: now,
+    status: "indexed",
+    source,
+    url,
+    title,
+    chunks,
+  });
+
+  return { file_id: getFileByPath(db, path).id, chunks: chunks.length, updated: Boolean(existing) };
 }
