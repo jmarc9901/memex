@@ -16,6 +16,13 @@ const PROVIDER_BASE_URLS = {
   lmstudio: "http://127.0.0.1:1234/v1",
 };
 
+// Presets que corren en la propia maquina (Ruta 3: LLM local, sin nube).
+export const LOCAL_PROVIDERS = {
+  ollama: PROVIDER_BASE_URLS.ollama,
+  llamacpp: PROVIDER_BASE_URLS.llamacpp,
+  lmstudio: PROVIDER_BASE_URLS.lmstudio,
+};
+
 /** Resuelve la URL base del endpoint de chat. */
 export function resolveBaseUrl(rag) {
   if (rag.base_url) return rag.base_url.replace(/\/$/, "");
@@ -57,6 +64,48 @@ export function buildPrompt(question, context) {
 }
 
 /**
+ * Lista los modelos disponibles en un endpoint compatible con OpenAI.
+ * Best-effort: si no responde o falla, devuelve una lista vacia.
+ * @param {string} baseUrl
+ * @param {{apiKey?:string, fetchImpl?:Function}} [opts]
+ * @returns {Promise<string[]>}
+ */
+export async function listModels(baseUrl, opts = {}) {
+  if (!baseUrl) return [];
+  const doFetch = opts.fetchImpl ?? globalThis.fetch;
+  try {
+    const res = await doFetch(`${baseUrl.replace(/\/$/, "")}/models`, {
+      headers: opts.apiKey ? { authorization: `Bearer ${opts.apiKey}` } : {},
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data?.data ?? []).map((m) => m?.id).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Comprueba si un endpoint esta levantado y que modelos ofrece.
+ * @returns {Promise<{reachable:boolean, models:string[]}>}
+ */
+export async function probeEndpoint(baseUrl, opts = {}) {
+  if (!baseUrl) return { reachable: false, models: [] };
+  const doFetch = opts.fetchImpl ?? globalThis.fetch;
+  try {
+    const res = await doFetch(`${baseUrl.replace(/\/$/, "")}/models`, {
+      headers: opts.apiKey ? { authorization: `Bearer ${opts.apiKey}` } : {},
+    });
+    // Responde aunque devuelva error: el servidor esta levantado.
+    if (!res.ok) return { reachable: true, models: [] };
+    const data = await res.json().catch(() => ({}));
+    return { reachable: true, models: (data?.data ?? []).map((m) => m?.id).filter(Boolean) };
+  } catch {
+    return { reachable: false, models: [] };
+  }
+}
+
+/**
  * Pregunta en lenguaje natural con RAG.
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {string} question
@@ -75,6 +124,13 @@ export async function ask(db, question, opts) {
   }
 
   const { system, user } = buildPrompt(question, context);
+  // Si no hay modelo configurado, tomamos el primero que ofrezca el endpoint.
+  // Asi funciona "out of the box" contra un LLM local (Ollama, llama.cpp...).
+  let model = rag.model || "";
+  if (!model) {
+    const available = await listModels(baseUrl, { apiKey: rag.api_key, fetchImpl: doFetch });
+    model = available[0] ?? "";
+  }
   try {
     const res = await doFetch(`${baseUrl}/chat/completions`, {
       method: "POST",
@@ -83,7 +139,7 @@ export async function ask(db, question, opts) {
         ...(rag.api_key ? { authorization: `Bearer ${rag.api_key}` } : {}),
       },
       body: JSON.stringify({
-        model: rag.model || undefined,
+        model: model || undefined,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { toolStatus, configStatus, capabilitySummary } from "../src/doctor.js";
+import { toolStatus, configStatus, capabilitySummary, pingRag } from "../src/doctor.js";
 
 test("toolStatus lista las herramientas opcionales con su estado", () => {
   const tools = toolStatus();
@@ -43,6 +43,26 @@ test("configStatus tolera configuracion vacia", () => {
   assert.equal(cfg.rag_enabled, false);
   assert.equal(cfg.rag_model, null);
   assert.equal(cfg.rag_base_url, null);
+});
+
+test("pingRag sondea el endpoint configurado y los presets locales", async () => {
+  const fetchImpl = async (url) => {
+    if (url.includes("11434")) {
+      return { ok: true, json: async () => ({ data: [{ id: "llama3.2" }] }) };
+    }
+    throw new Error("connection refused");
+  };
+  const results = await pingRag({ rag: { provider: "ollama" } }, { fetchImpl });
+
+  const ollama = results.find((r) => r.provider === "ollama");
+  assert.equal(ollama.reachable, true);
+  assert.deepEqual(ollama.models, ["llama3.2"]);
+
+  const llamacpp = results.find((r) => r.provider === "llamacpp");
+  assert.equal(llamacpp.reachable, false);
+  assert.deepEqual(llamacpp.models, []);
+  // no duplica el preset ya usado como endpoint configurado
+  assert.equal(results.filter((r) => r.url.includes("11434")).length, 1);
 });
 
 test("capabilitySummary deriva las capacidades del estado de las herramientas", () => {

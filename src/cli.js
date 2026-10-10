@@ -8,7 +8,7 @@ import { createEmbedder } from "./embeddings.js";
 import { loadConfig } from "./config.js";
 import { ask } from "./rag.js";
 import { startServer } from "./server.js";
-import { toolStatus, configStatus, capabilitySummary } from "./doctor.js";
+import { toolStatus, configStatus, capabilitySummary, pingRag } from "./doctor.js";
 import { benchmark } from "./bench.js";
 import {
   addToTrail,
@@ -30,7 +30,8 @@ Uso:
   memex export <consulta> [--format jsonl|csv|md] [-o ARCHIVO] [-n N] [--any] [--mode MODO]
   memex relate <ref> [-n N] [--json]
   memex serve [--host H] [--port N] [--db RUTA]
-  memex doctor [--json]
+  memex doctor [--ping] [--json]
+  memex models [--json]
   memex bench [carpeta] [consulta...] [-n N] [--no-embed] [--json]
   memex stats [--json]
   memex clear
@@ -52,6 +53,7 @@ Opciones:
   -o, --out     Archivo de salida para export (por defecto stdout)
   --host H      Host del servidor (por defecto 127.0.0.1)
   --port N      Puerto del servidor (por defecto 4747 o $MEMEX_PORT)
+  --ping        (doctor) Comprueba si los servidores RAG locales responden
   --json        Salida en JSON
   -h, --help    Muestra esta ayuda
 
@@ -161,6 +163,8 @@ export async function run(argv, io = {}) {
       return cmdServe({ out, color, flags, dbPath });
     case "doctor":
       return cmdDoctor({ out, color, flags });
+    case "models":
+      return cmdModels({ out, color, flags });
     case "bench":
       return cmdBench({ out, color, flags });
     case "stats":
@@ -382,15 +386,30 @@ function cmdServe({ out, color, flags, dbPath }) {
   return handle.close;
 }
 
-function cmdDoctor({ out, color, flags }) {
+async function cmdDoctor({ out, color, flags }) {
   const config = loadConfig();
   const tools = toolStatus();
   const caps = capabilitySummary(tools);
   const cfg = configStatus(config);
 
-  if (flags.json) {
+  if (flags.json && !flags.ping) {
     out.write(JSON.stringify({ tools, capabilities: caps, config: cfg }, null, 2) + "\n");
     return;
+  }
+
+  if (flags.ping) {
+    const probes = await pingRag(config);
+    if (flags.json) {
+      out.write(JSON.stringify({ tools, capabilities: caps, config: cfg, rag: probes }, null, 2) + "\n");
+      return;
+    }
+    out.write(`${color.bold("Servidores RAG")}\n`);
+    for (const p of probes) {
+      const mark = p.reachable ? color.green("✓") : color.dim("✗");
+      const models = p.models.length ? color.dim(` (${p.models.slice(0, 5).join(", ")})`) : "";
+      out.write(`  ${mark} ${p.provider.padEnd(12)} ${color.dim(p.url)}${models}\n`);
+    }
+    out.write("\n");
   }
 
   out.write(`${color.bold("Herramientas opcionales")}\n`);
@@ -414,6 +433,30 @@ function cmdDoctor({ out, color, flags }) {
   out.write(`  RAG URL    : ${cfg.rag_base_url ?? color.dim("(sin definir)")}\n`);
   out.write(`  OCR idioma : ${cfg.ocr_lang}\n`);
   out.write(`  modelo STT : ${cfg.whisper_model ?? color.dim("(sin definir)")}\n`);
+}
+
+async function cmdModels({ out, color, flags }) {
+  const config = loadConfig();
+  const probes = await pingRag(config);
+
+  if (flags.json) {
+    out.write(JSON.stringify(probes, null, 2) + "\n");
+    return;
+  }
+
+  const available = probes.filter((p) => p.models.length);
+  if (!available.length) {
+    out.write(`${color.yellow("Sin modelos locales detectados")}\n`);
+    out.write(
+      `${color.dim("Arranca Ollama (ollama serve), llama.cpp o LM Studio, o define rag.base_url.")}\n`
+    );
+    return;
+  }
+  for (const probe of probes) {
+    if (!probe.models.length) continue;
+    out.write(`${color.green("✓")} ${color.bold(probe.provider)} ${color.dim(probe.url)}\n`);
+    for (const model of probe.models) out.write(`    ${model}\n`);
+  }
 }
 
 function yesNo(value, color) {

@@ -1,6 +1,6 @@
 // Memex Offline - diagnostico de herramientas externas opcionales y config.
 import { hasCommand } from "./tools.js";
-import { resolveBaseUrl } from "./rag.js";
+import { resolveBaseUrl, probeEndpoint, LOCAL_PROVIDERS } from "./rag.js";
 
 // Herramientas opcionales. `args` solo sirve para comprobar que el binario
 // existe: `hasCommand` mira si el proceso pudo lanzarse, no su codigo de salida.
@@ -47,6 +47,35 @@ export function configStatus(config = {}) {
     ocr_lang: process.env.MEMEX_OCR_LANG || "eng",
     whisper_model: process.env.MEMEX_WHISPER_MODEL || null,
   };
+}
+
+/**
+ * Sondea el endpoint RAG configurado y los presets locales (Ollama, llama.cpp,
+ * LM Studio) para ver cuales estan levantados y que modelos ofrecen.
+ * @param {object} config
+ * @param {{fetchImpl?:Function}} [opts]
+ * @returns {Promise<Array<{provider:string,url:string,reachable:boolean,models:string[]}>>}
+ */
+export async function pingRag(config = {}, opts = {}) {
+  const rag = config.rag ?? {};
+  const targets = [];
+  const configured = resolveBaseUrl(rag);
+  if (configured) {
+    targets.push({ provider: rag.provider ?? "config", url: configured, apiKey: rag.api_key ?? "" });
+  }
+  for (const [provider, url] of Object.entries(LOCAL_PROVIDERS)) {
+    if (!targets.some((t) => t.url === url)) targets.push({ provider, url, apiKey: "" });
+  }
+
+  const results = [];
+  for (const target of targets) {
+    const { reachable, models } = await probeEndpoint(target.url, {
+      apiKey: target.apiKey,
+      fetchImpl: opts.fetchImpl,
+    });
+    results.push({ provider: target.provider, url: target.url, reachable, models });
+  }
+  return results;
 }
 
 /** ¿Hay al menos una herramienta de PDF, OCR y transcripcion disponible? */

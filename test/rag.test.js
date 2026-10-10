@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { openDatabase } from "../src/db.js";
 import { indexFolder } from "../src/indexer.js";
 import { createEmbedder } from "../src/embeddings.js";
-import { ask, buildPrompt, retrieveContext, resolveBaseUrl } from "../src/rag.js";
+import { ask, buildPrompt, listModels, probeEndpoint, retrieveContext, resolveBaseUrl } from "../src/rag.js";
 
 function makeDb() {
   const root = mkdtempSync(join(tmpdir(), "memex-rag-"));
@@ -31,6 +31,41 @@ test("resolveBaseUrl incluye presets locales sin clave", () => {
   assert.equal(resolveBaseUrl({ provider: "ollama" }), "http://127.0.0.1:11434/v1");
   assert.equal(resolveBaseUrl({ provider: "llamacpp" }), "http://127.0.0.1:8080/v1");
   assert.equal(resolveBaseUrl({ provider: "lmstudio" }), "http://127.0.0.1:1234/v1");
+});
+
+test("listModels lista los modelos o devuelve vacio si falla", async () => {
+  const ok = await listModels("http://127.0.0.1:11434/v1", {
+    fetchImpl: async () => ({ ok: true, json: async () => ({ data: [{ id: "llama3.2" }, { id: "qwen" }] }) }),
+  });
+  assert.deepEqual(ok, ["llama3.2", "qwen"]);
+
+  const bad = await listModels("http://127.0.0.1:11434/v1", {
+    fetchImpl: async () => {
+      throw new Error("refused");
+    },
+  });
+  assert.deepEqual(bad, []);
+
+  assert.deepEqual(await listModels("", {}), []);
+});
+
+test("probeEndpoint distingue levantado, vacio y caido", async () => {
+  const up = await probeEndpoint("http://127.0.0.1:8080/v1", {
+    fetchImpl: async () => ({ ok: true, json: async () => ({ data: [{ id: "m" }] }) }),
+  });
+  assert.deepEqual(up, { reachable: true, models: ["m"] });
+
+  const emptyButUp = await probeEndpoint("http://127.0.0.1:8080/v1", {
+    fetchImpl: async () => ({ ok: false, status: 404 }),
+  });
+  assert.deepEqual(emptyButUp, { reachable: true, models: [] });
+
+  const down = await probeEndpoint("http://127.0.0.1:8080/v1", {
+    fetchImpl: async () => {
+      throw new Error("refused");
+    },
+  });
+  assert.deepEqual(down, { reachable: false, models: [] });
 });
 
 test("buildPrompt numera el contexto y pide citas", () => {
@@ -96,6 +131,31 @@ test("ask con endpoint local genera respuesta y cita el modelo", async () => {
     assert.equal(sent.url, "http://localhost:8080/v1/chat/completions");
     assert.equal(sent.body.model, "m1");
     assert.equal(sent.body.messages[0].role, "system");
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ask elige el primer modelo del endpoint si no hay modelo configurado", async () => {
+  const { root, db } = makeDb();
+  try {
+    const requests = [];
+    const fetchImpl = async (url, options) => {
+      requests.push({ url, body: options?.body ? JSON.parse(options.body) : null });
+      if (url.endsWith("/models")) {
+        return { ok: true, json: async () => ({ data: [{ id: "llama3.2" }, { id: "qwen" }] }) };
+      }
+      return { ok: true, json: async () => ({ model: "llama3.2", choices: [{ message: { content: "ok" } }] }) };
+    };
+    const result = await ask(db, "conclusiones", {
+      config: { rag: { base_url: "http://127.0.0.1:11434/v1", api_key: "", model: "" } },
+      embedder: createEmbedder({}),
+      fetchImpl,
+    });
+    assert.equal(result.answer, "ok");
+    const chat = requests.find((r) => r.url.endsWith("/chat/completions"));
+    assert.equal(chat.body.model, "llama3.2");
   } finally {
     db.close();
     rmSync(root, { recursive: true, force: true });
