@@ -60,6 +60,8 @@ node bin/memex.js serve        # http://127.0.0.1:4747
 | `trails` | Lista los trails existentes. |
 | `trail create/add/link/show/rm` | Crea y edita trails asociativos. |
 | `serve` | Arranca la API local y la GUI web. |
+| `doctor` | Diagnóstico: herramientas externas disponibles y configuración efectiva. |
+| `bench [carpeta]` | Benchmark reproducible de indexado y búsqueda sobre un índice desechable. |
 | `stats` | Estadísticas del índice (archivos, fragmentos, vectores, trails). |
 | `clear` | Vacía el índice (documentos, chunks y trails). |
 
@@ -111,6 +113,7 @@ La GUI se apoya en la misma API que consume la extensión:
 | `POST` | `/api/save` | Guardar un documento (`{url,title,text}`). |
 | `POST` | `/api/ask` | Pregunta RAG. |
 | `POST` | `/api/index` | Indexar una carpeta (`{path}`). |
+| `GET` | `/api/tools` | Herramientas opcionales disponibles y configuración. |
 | `GET` | `/api/config` | Configuración activa. |
 
 ## Extensión de navegador (opcional)
@@ -192,6 +195,8 @@ src/rag.js        recuperación + generación opcional
 src/trails.js     trails asociativos y relación entre documentos
 src/ocr.js        OCR opcional (tesseract)
 src/media.js      transcripción opcional (whisper)
+src/doctor.js     diagnóstico de herramientas externas y configuración
+src/bench.js      benchmark de indexado y búsqueda
 src/tools.js      detección de binarios externos
 src/server.js     API local + GUI web
 web/              GUI (HTML/CSS/JS vanilla)
@@ -213,10 +218,15 @@ En un equipo modesto, el objetivo es indexar y buscar sin GPU y con un consumo
 de RAM bajo. El propio CLI reporta tiempos:
 
 ```bash
-node bin/memex.js index ~/Documentos --json   # campo "seconds"
-node bin/memex.js search "ansiedad" --json    # campo "took_ms"
+node bin/memex.js bench ~/Documentos          # indexado + latencia de búsqueda
+node bin/memex.js bench ~/Documentos --json    # mismas métricas en JSON
+node bin/memex.js index ~/Documentos --json    # campo "seconds"
+node bin/memex.js search "ansiedad" --json     # campo "took_ms"
 node bin/memex.js stats                        # tamaño del índice
 ```
+
+`memex bench` indexa en un índice temporal (no toca tu índice real), mide
+archivos/s, la mediana de latencia de búsqueda y el RSS, y borra todo al salir.
 
 ## Roadmap
 
