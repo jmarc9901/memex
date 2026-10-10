@@ -28,7 +28,13 @@ test("configStatus resume embeddings, RAG y variables de entorno", () => {
   assert.equal(cfg.rag_enabled, true);
   assert.equal(cfg.rag_provider, "groq");
   assert.equal(cfg.rag_model, "m1");
+  assert.equal(cfg.rag_base_url, "https://api.groq.com/openai/v1");
   assert.equal(typeof cfg.ocr_lang, "string");
+});
+
+test("configStatus resuelve la URL de proveedores locales", () => {
+  const cfg = configStatus({ rag: { enabled: true, provider: "ollama" } });
+  assert.equal(cfg.rag_base_url, "http://127.0.0.1:11434/v1");
 });
 
 test("configStatus tolera configuracion vacia", () => {
@@ -36,6 +42,7 @@ test("configStatus tolera configuracion vacia", () => {
   assert.equal(cfg.embed_provider, "hash");
   assert.equal(cfg.rag_enabled, false);
   assert.equal(cfg.rag_model, null);
+  assert.equal(cfg.rag_base_url, null);
 });
 
 test("capabilitySummary deriva las capacidades del estado de las herramientas", () => {

@@ -6,9 +6,14 @@
 // devuelve los fragmentos relevantes para que los leas tu mismo.
 import { hybridSearch } from "./search.js";
 
+// Endpoints por defecto. Los locales (ollama, llamacpp, lmstudio) no necesitan
+// clave: basta con que el servidor este levantado en tu maquina.
 const PROVIDER_BASE_URLS = {
   groq: "https://api.groq.com/openai/v1",
   openrouter: "https://openrouter.ai/api/v1",
+  ollama: "http://127.0.0.1:11434/v1",
+  llamacpp: "http://127.0.0.1:8080/v1",
+  lmstudio: "http://127.0.0.1:1234/v1",
 };
 
 /** Resuelve la URL base del endpoint de chat. */

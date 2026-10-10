@@ -1,5 +1,6 @@
 // Memex Offline - diagnostico de herramientas externas opcionales y config.
 import { hasCommand } from "./tools.js";
+import { resolveBaseUrl } from "./rag.js";
 
 // Herramientas opcionales. `args` solo sirve para comprobar que el binario
 // existe: `hasCommand` mira si el proceso pudo lanzarse, no su codigo de salida.
@@ -42,6 +43,7 @@ export function configStatus(config = {}) {
     rag_enabled: Boolean(rag.enabled),
     rag_provider: rag.provider ?? null,
     rag_model: rag.model || null,
+    rag_base_url: resolveBaseUrl(rag),
     ocr_lang: process.env.MEMEX_OCR_LANG || "eng",
     whisper_model: process.env.MEMEX_WHISPER_MODEL || null,
   };

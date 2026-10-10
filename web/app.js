@@ -213,12 +213,89 @@ async function openTrail(name) {
     detail.innerHTML =
       (nodes ? `<ol>${nodes}</ol>` : '<p class="empty">Trail vacío.</p>') +
       (links ? `<h3 style="margin-top:12px">Enlaces</h3>${links}` : "");
+    renderTrailSvg(g);
   } catch {
     detail.innerHTML = '<p class="empty">Ese trail todavía no existe. Añade un nodo para crearlo.</p>';
+    $("#trail-graph").innerHTML = "";
     currentTrail = name;
     $("#trail-name").value = name;
   }
 }
+
+/** Dibuja el grafo del trail como SVG (disposicion circular, sin dependencias). */
+function renderTrailSvg(g) {
+  const box = $("#trail-graph");
+  const nodes = g.nodes ?? [];
+  const links = g.links ?? [];
+  if (!nodes.length) {
+    box.innerHTML = "";
+    return;
+  }
+  const size = 400;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = Math.min(150, 40 + nodes.length * 10);
+  const pos = new Map();
+  nodes.forEach((node, i) => {
+    const angle = (i / nodes.length) * Math.PI * 2 - Math.PI / 2;
+    pos.set(node.id, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+  });
+
+  const esc = (s) => escapeHtml(String(s ?? "").slice(0, 18));
+  const parts = [
+    `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="grafo del trail">`,
+    '<defs><marker id="memex-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>',
+  ];
+  for (const link of links) {
+    const a = pos.get(link.source);
+    const b = pos.get(link.target);
+    if (!a || !b) continue;
+    parts.push(
+      `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" ` +
+        'stroke="currentColor" stroke-opacity="0.4" marker-end="url(#memex-arrow)"/>'
+    );
+  }
+  for (const node of nodes) {
+    const p = pos.get(node.id);
+    parts.push(
+      `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="var(--accent)"/>` +
+        `<text x="${p.x.toFixed(1)}" y="${(p.y - 14).toFixed(1)}" text-anchor="middle" font-size="11" fill="currentColor">${esc(node.label)}</text>`
+    );
+  }
+  parts.push("</svg>");
+  box.innerHTML = parts.join("");
+}
+
+async function fetchTrailFormat(format) {
+  if (!currentTrail) return null;
+  const res = await fetch(`/api/trails/${encodeURIComponent(currentTrail)}?format=${format}`);
+  return res.ok ? res.text() : null;
+}
+
+async function downloadTrail(format, ext) {
+  const text = await fetchTrailFormat(format);
+  if (!text) return;
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${currentTrail}.${ext}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+$("#trail-dot").addEventListener("click", () => downloadTrail("dot", "dot"));
+$("#trail-md").addEventListener("click", () => downloadTrail("md", "md"));
+$("#trail-mermaid").addEventListener("click", async (event) => {
+  const text = await fetchTrailFormat("mermaid");
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    event.currentTarget.textContent = "Copiado ✓";
+    setTimeout(() => (event.currentTarget.textContent = "Copiar Mermaid"), 1500);
+  } catch {
+    event.currentTarget.textContent = "Copia manual";
+  }
+});
 
 $("#trail-refresh").addEventListener("click", refreshTrails);
 

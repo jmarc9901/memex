@@ -361,6 +361,22 @@ label.any {
   font-size: 13px;
 }
 
+.trail-graph {
+  color: var(--text);
+  margin-top: 12px;
+}
+
+.trail-graph svg {
+  max-height: 340px;
+}
+
+.trail-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
 .section-title {
   font-size: 13px;
   text-transform: uppercase;

@@ -8,11 +8,17 @@ import { hybridSearch } from "./search.js";
 import { createEmbedder } from "./embeddings.js";
 import { loadConfig } from "./config.js";
 import { indexFolder, saveDocument } from "./indexer.js";
-import { addToTrail, linkInTrail, listTrails, showTrail, relate, toD3 } from "./trails.js";
+import { addToTrail, exportTrail, linkInTrail, listTrails, showTrail, relate, toD3 } from "./trails.js";
 import { ask } from "./rag.js";
 import { toolStatus, configStatus, capabilitySummary } from "./doctor.js";
 
 const WEB_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "web");
+
+const TRAIL_TYPES = {
+  dot: "text/vnd.graphviz; charset=utf-8",
+  mermaid: "text/plain; charset=utf-8",
+  md: "text/markdown; charset=utf-8",
+};
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -100,6 +106,18 @@ async function handleApi(req, res, url, { db, embedder, config }) {
     const name = decodeURIComponent(path.slice("/api/trails/".length));
     const graph = showTrail(db, name);
     if (!graph) return sendJson(res, 404, { error: "trail no encontrado" });
+    const format = q.get("format");
+    if (format && format !== "json") {
+      let text;
+      try {
+        text = exportTrail(graph, format);
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message });
+      }
+      res.writeHead(200, { "content-type": TRAIL_TYPES[format] ?? "text/plain; charset=utf-8" });
+      res.end(text);
+      return;
+    }
     return sendJson(res, 200, toD3(graph));
   }
 

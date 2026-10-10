@@ -10,6 +10,7 @@ import { createEmbedder } from "../src/embeddings.js";
 import {
   ensureTrail,
   addToTrail,
+  exportTrail,
   linkInTrail,
   listTrails,
   showTrail,
@@ -63,6 +64,40 @@ test("crea, lista, enlaza y exporta trails", () => {
     db.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("exportTrail serializa a dot, mermaid, markdown y json", () => {
+  const graph = {
+    trail: { name: "proyecto-x", description: "camino" },
+    nodes: [
+      { file_id: 1, name: "a.md", path: "/a.md", ext: ".md", title: null, note: "inicio", position: 0 },
+      { file_id: 2, name: "b.md", path: "/b.md", ext: ".md", title: "B", note: null, position: 1 },
+    ],
+    edges: [{ from: 1, to: 2, label: "relacionado" }],
+  };
+
+  const dot = exportTrail(graph, "dot");
+  assert.match(dot, /^digraph "proyecto-x" \{/);
+  assert.match(dot, /n1 -> n2 \[label="relacionado"\]/);
+  assert.match(dot, /label="B/);
+
+  const mermaid = exportTrail(graph, "mermaid");
+  assert.match(mermaid, /^graph LR/);
+  assert.match(mermaid, /n1 -->\|relacionado\| n2/);
+
+  const md = exportTrail(graph, "md");
+  assert.match(md, /^# Trail: proyecto-x/);
+  assert.match(md, /_camino_/);
+  assert.match(md, /1\. \*\*a\.md\*\*/);
+  assert.match(md, /inicio/);
+  assert.match(md, /a\.md → B/);
+
+  const json = JSON.parse(exportTrail(graph, "json"));
+  assert.equal(json.trail, "proyecto-x");
+  assert.equal(json.description, "camino");
+  assert.equal(json.links.length, 1);
+
+  assert.throws(() => exportTrail(graph, "pdf"), /formato de trail invalido/);
 });
 
 test("relate encuentra documentos afines por similitud", () => {

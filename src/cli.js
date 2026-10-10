@@ -13,12 +13,12 @@ import { benchmark } from "./bench.js";
 import {
   addToTrail,
   ensureTrail,
+  exportTrail,
   linkInTrail,
   listTrails,
   relate,
   removeTrail,
   showTrail,
-  toD3,
 } from "./trails.js";
 
 const HELP = `Memex Offline - buscador personal 100% offline (SQLite FTS5 + embeddings en CPU)
@@ -38,7 +38,7 @@ Uso:
   memex trail create <nombre> [--desc TEXTO]
   memex trail add <nombre> <ref...> [--note TEXTO]
   memex trail link <nombre> <ref1> <ref2> [--label TEXTO]
-  memex trail show <nombre> [--json]
+  memex trail show <nombre> [--format json|dot|mermaid|md] [--json]
   memex trail rm <nombre>
 
 Opciones:
@@ -48,7 +48,7 @@ Opciones:
   --mode MODO   hybrid (defecto), lexical o semantic
   -n, --limit   Numero maximo de resultados (por defecto 20)
   --any         Une los terminos con OR en vez de AND
-  --format FMT  Formato de export: jsonl (defecto), csv o md
+  --format FMT  Formato: export (jsonl|csv|md) o trail show (json|dot|mermaid|md)
   -o, --out     Archivo de salida para export (por defecto stdout)
   --host H      Host del servidor (por defecto 127.0.0.1)
   --port N      Puerto del servidor (por defecto 4747 o $MEMEX_PORT)
@@ -411,6 +411,7 @@ function cmdDoctor({ out, color, flags }) {
     `  RAG        : ${cfg.rag_enabled ? color.green("activado") : color.dim("desactivado")}` +
       `${cfg.rag_provider ? color.dim(` (${cfg.rag_provider}${cfg.rag_model ? ` / ${cfg.rag_model}` : ""})`) : ""}\n`
   );
+  out.write(`  RAG URL    : ${cfg.rag_base_url ?? color.dim("(sin definir)")}\n`);
   out.write(`  OCR idioma : ${cfg.ocr_lang}\n`);
   out.write(`  modelo STT : ${cfg.whisper_model ?? color.dim("(sin definir)")}\n`);
 }
@@ -538,8 +539,9 @@ function cmdTrail({ out, color, flags, dbPath }) {
       if (!name) throw new Error("uso: memex trail show <nombre>");
       const graph = showTrail(db, name);
       if (!graph) throw new Error(`no existe el trail: ${name}`);
-      if (flags.json) {
-        out.write(JSON.stringify(toD3(graph), null, 2) + "\n");
+      const format = flags.json ? "json" : flags.format;
+      if (format && format !== "text") {
+        out.write(exportTrail(graph, format) + "\n");
         return;
       }
       out.write(`${color.bold(graph.trail.name)} ${color.dim(graph.trail.description || "")}\n`);

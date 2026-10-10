@@ -27,6 +27,12 @@ test("resolveBaseUrl usa el proveedor o el base_url explicito", () => {
   assert.equal(resolveBaseUrl({ provider: "desconocido" }), null);
 });
 
+test("resolveBaseUrl incluye presets locales sin clave", () => {
+  assert.equal(resolveBaseUrl({ provider: "ollama" }), "http://127.0.0.1:11434/v1");
+  assert.equal(resolveBaseUrl({ provider: "llamacpp" }), "http://127.0.0.1:8080/v1");
+  assert.equal(resolveBaseUrl({ provider: "lmstudio" }), "http://127.0.0.1:1234/v1");
+});
+
 test("buildPrompt numera el contexto y pide citas", () => {
   const prompt = buildPrompt("¿conclusiones?", [
     { n: 1, name: "a.md", text: "texto uno" },

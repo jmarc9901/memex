@@ -132,3 +132,79 @@ export function toD3(graph) {
     links: graph.edges.map((e) => ({ source: e.from, target: e.to, label: e.label })),
   };
 }
+
+export const TRAIL_FORMATS = ["json", "dot", "mermaid", "md"];
+
+/**
+ * Serializa un trail a distintos formatos.
+ * @param {ReturnType<typeof getTrailGraph>} graph
+ * @param {'json'|'dot'|'mermaid'|'md'} [format]
+ * @returns {string}
+ */
+export function exportTrail(graph, format = "json") {
+  const g = toD3(graph);
+  g.description = graph?.trail?.description ?? "";
+  switch (format) {
+    case "json":
+      return JSON.stringify(g, null, 2);
+    case "dot":
+      return toDot(g);
+    case "mermaid":
+      return toMermaid(g);
+    case "md":
+    case "markdown":
+      return toMarkdown(g);
+    default:
+      throw new Error(`formato de trail invalido: ${format} (usa ${TRAIL_FORMATS.join(", ")})`);
+  }
+}
+
+const escDot = (s) => String(s ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+const escMermaid = (s) => String(s ?? "").replace(/"/g, "#quot;").replace(/\n/g, " ");
+
+function toDot(g) {
+  const lines = [
+    `digraph "${escDot(g.trail)}" {`,
+    "  rankdir=LR;",
+    '  node [shape=box, style=rounded, fontname="Helvetica"];',
+    '  edge [fontname="Helvetica"];',
+  ];
+  for (const n of g.nodes) {
+    lines.push(`  n${n.id} [label="${escDot(n.label)}\\n${escDot(n.path)}"];`);
+  }
+  for (const l of g.links) {
+    const label = l.label ? ` [label="${escDot(l.label)}"]` : "";
+    lines.push(`  n${l.source} -> n${l.target}${label};`);
+  }
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function toMermaid(g) {
+  const lines = ["graph LR"];
+  for (const n of g.nodes) lines.push(`  n${n.id}["${escMermaid(n.label)}"]`);
+  for (const l of g.links) {
+    const label = l.label ? `|${escMermaid(l.label)}|` : "";
+    lines.push(`  n${l.source} -->${label} n${l.target}`);
+  }
+  return lines.join("\n");
+}
+
+function toMarkdown(g) {
+  const byId = new Map(g.nodes.map((n) => [n.id, n.label]));
+  const lines = [`# Trail: ${g.trail}`, ""];
+  if (g.description) lines.push(`_${g.description}_`, "");
+  lines.push("## Documentos", "");
+  if (!g.nodes.length) lines.push("(vacio)");
+  g.nodes.forEach((n, i) => {
+    lines.push(`${i + 1}. **${n.label}** - \`${n.path}\`${n.note ? ` — ${n.note}` : ""}`);
+  });
+  lines.push("", "## Enlaces", "");
+  if (!g.links.length) lines.push("(sin enlaces)");
+  for (const l of g.links) {
+    const from = byId.get(l.source) ?? `#${l.source}`;
+    const to = byId.get(l.target) ?? `#${l.target}`;
+    lines.push(`- ${from} → ${to}${l.label ? ` _(${l.label})_` : ""}`);
+  }
+  return lines.join("\n") + "\n";
+}
