@@ -60,7 +60,8 @@ node bin/memex.js serve        # http://127.0.0.1:4747
 | `trails` | Lista los trails existentes. |
 | `trail create/add/link/show/rm` | Crea y edita trails asociativos. |
 | `serve` | Arranca la API local y la GUI web. |
-| `doctor` | Diagnóstico: herramientas externas disponibles y configuración efectiva. |
+| `doctor` | Diagnóstico: herramientas externas, configuración efectiva y (`--ping`) servidores RAG locales. |
+| `models` | Lista los modelos ofrecidos por los servidores LLM locales detectados. |
 | `bench [carpeta]` | Benchmark reproducible de indexado y búsqueda sobre un índice desechable. |
 | `stats` | Estadísticas del índice (archivos, fragmentos, vectores, trails). |
 | `clear` | Vacía el índice (documentos, chunks y trails). |
@@ -78,6 +79,7 @@ node bin/memex.js serve        # http://127.0.0.1:4747
 | `--format` | Formato de `export`: `jsonl`, `csv` o `md`. |
 | `-o`, `--out` | Archivo de salida de `export`. |
 | `--host`, `--port` | Host y puerto de `serve`. |
+| `--ping` | (`doctor`) Comprueba si los servidores RAG locales responden. |
 | `--json` | Salida en JSON (para scripts). |
 
 ### Ejemplos
@@ -151,6 +153,21 @@ El archivo de config se busca, por orden, en `$MEMEX_CONFIG`,
 `rag.provider` acepta `openai-compatible`, `groq`, `openrouter` y los presets
 locales `ollama` (`127.0.0.1:11434`), `llamacpp` (`127.0.0.1:8080`) y `lmstudio`
 (`127.0.0.1:1234`). Los proveedores locales no necesitan `api_key`.
+
+### LLM local (Ruta 3)
+
+`memex models` detecta servidores locales (Ollama, llama.cpp, LM Studio) y lista
+sus modelos; `memex doctor --ping` comprueba si responden. Si no configuras
+`rag.model`, `memex ask` usa el primer modelo que ofrezca el endpoint, así que
+basta con tener un servidor local corriendo:
+
+```bash
+ollama serve              # en otra terminal
+node bin/memex.js models   # -> ✓ ollama  llama3.2
+node bin/memex.js ask "¿qué conclusiones saqué?"
+```
+
+Todo el flujo (recuperación y generación) ocurre en tu máquina.
 
 Variables de entorno: `MEMEX_DB`, `MEMEX_CONFIG`, `MEMEX_EMBED_PROVIDER`,
 `MEMEX_EMBED_DIM`, `MEMEX_RAG_API_KEY`, `MEMEX_RAG_BASE_URL`,

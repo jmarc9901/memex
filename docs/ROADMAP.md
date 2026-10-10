@@ -43,6 +43,7 @@ Principios:
 | 6 | GUI de escritorio / web | ✅ Hecho (web) | `src/server.js`, `web/` |
 | 7 | Trails: grafo de relaciones entre documentos | ✅ Hecho | `src/trails.js` |
 | 8 | Extensión de navegador para guardar páginas | ✅ Hecho | `extension/` |
+| 9 | LLM local: detección de servidores y auto-selección de modelo | ✅ Hecho | `src/rag.js`, `src/doctor.js` |
 
 ## Rutas de IA (todas opcionales)
 
@@ -72,11 +73,14 @@ También vale cualquier endpoint local compatible con OpenAI (`llama.cpp`,
 `Ollama`, `LM Studio`), ya sea indicando `base_url` o usando los presets
 `llamacpp`, `ollama` y `lmstudio`; en ese caso no se necesita clave.
 
-### Ruta 3 — LLM local ultraligera (futuro)
+### Ruta 3 — LLM local ultraligera
 
-Modelos de ~300M de parámetros (~328 MB cuantizados) que corren en CPU para
-validar el flujo completo sin conexión. Es el siguiente paso natural para cerrar
-el círculo "100% offline también en la generación".
+Implementada la integración: `memex models` y `memex doctor --ping` detectan
+servidores locales (presets `ollama`, `llamacpp`, `lmstudio`) y `memex ask`
+auto-selecciona el primer modelo disponible si no configuras `rag.model`. Basta
+con descargar un modelo pequeño (p. ej. ~300M de parámetros, ~328 MB
+cuantizados) y tenerlo servido en local: el flujo completo queda offline, sin
+clave ni conexión. La calidad de las respuestas depende del modelo elegido.
 
 ## Cómo acercar el proyecto a la comunidad
 
