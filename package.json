@@ -1,9 +1,32 @@
 {
   "name": "memex",
   "version": "0.1.0",
-  "description": "Memex Offline - tu buscador personal 100% offline (full-text + FTS5, sin LLM, sin GPU)",
+  "description": "Memex Offline - tu buscador personal 100% offline (full-text FTS5 + embeddings en CPU, sin LLM, sin GPU, sin dependencias)",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmarc9901/memex.git"
+  },
+  "homepage": "https://github.com/jmarc9901/memex#readme",
+  "bugs": {
+    "url": "https://github.com/jmarc9901/memex/issues"
+  },
+  "keywords": [
+    "memex",
+    "offline",
+    "full-text-search",
+    "sqlite",
+    "fts5",
+    "bm25",
+    "embeddings",
+    "rag",
+    "ocr",
+    "whisper",
+    "privacy",
+    "local-first",
+    "cli"
+  ],
   "engines": {
     "node": ">=22.5.0"
   },
@@ -11,10 +34,17 @@
     "memex": "./bin/memex.js"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "start": "node bin/memex.js serve",
+    "serve": "node bin/memex.js serve"
   },
   "files": [
     "bin",
-    "src"
+    "src",
+    "web",
+    "extension",
+    "docs",
+    "README.md",
+    "LICENSE"
   ]
 }
