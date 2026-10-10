@@ -44,6 +44,7 @@ Principios:
 | 7 | Trails: grafo de relaciones entre documentos | ✅ Hecho | `src/trails.js` |
 | 8 | Extensión de navegador para guardar páginas | ✅ Hecho | `extension/` |
 | 9 | LLM local: detección de servidores y auto-selección de modelo | ✅ Hecho | `src/rag.js`, `src/doctor.js` |
+| 10 | Indexado de archivos comprimidos (ZIP y gzip) | ✅ Hecho | `src/archive.js` |
 
 ## Rutas de IA (todas opcionales)
 

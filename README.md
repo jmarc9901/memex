@@ -182,6 +182,9 @@ Variables de entorno: `MEMEX_DB`, `MEMEX_CONFIG`, `MEMEX_EMBED_PROVIDER`,
 - **Código:** `.js/.ts/.tsx/.py/.rb/.go/.rs/.java/.c/.cpp/.cs/.sh/.sql/.css/...`.
 - **PDF:** con `pdftotext` o `mutool` si están instalados; si no, se omiten.
 - **Imágenes:** OCR con `tesseract` si está instalado.
+- **Comprimidos:** `.zip` (se indexan sus entradas de texto/código) y `.gz`
+  de texto, sin dependencias. Se omiten entradas binarias, cifradas y de
+  métodos no soportados.
 - **Audio/vídeo:** transcripción con `whisper.cpp` o `whisper` de Python.
 - **Web:** páginas guardadas desde la extensión (`source: "extension"`).
 
@@ -212,6 +215,7 @@ src/config.js     config (archivo + entorno)
 src/db.js         SQLite + FTS5, esquema, consultas, trails
 src/indexer.js    indexado incremental y guardado de documentos web
 src/extract.js    recorrido, extracción y chunking
+src/archive.js    lectura de ZIP/gzip sin dependencias
 src/query.js      construcción de consultas FTS5
 src/embeddings.js embeddings en CPU (hash) y utilidades de vectores
 src/search.js     búsqueda híbrida + fusión RRF
