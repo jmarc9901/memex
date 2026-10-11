@@ -4,13 +4,14 @@
 // una API compatible con OpenAI (Groq, OpenRouter, llama.cpp, Ollama...) solo
 // si el usuario ha configurado una clave o un base_url. Sin eso, `ask`
 // devuelve los fragmentos relevantes para que los leas tu mismo.
-import { hybridSearch } from "./search.js";
+import { hybridSearch, resolveQueryVec } from "./search.js";
 
 // Endpoints por defecto. Los locales (ollama, llamacpp, lmstudio) no necesitan
 // clave: basta con que el servidor este levantado en tu maquina.
 const PROVIDER_BASE_URLS = {
   groq: "https://api.groq.com/openai/v1",
   openrouter: "https://openrouter.ai/api/v1",
+  gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
   ollama: "http://127.0.0.1:11434/v1",
   llamacpp: "http://127.0.0.1:8080/v1",
   lmstudio: "http://127.0.0.1:1234/v1",
@@ -33,8 +34,9 @@ export function resolveBaseUrl(rag) {
  * Recupera el contexto local para una pregunta.
  * @returns {Array<{n:number,file_id:number,name:string,path:string,text:string,score:number}>}
  */
-export function retrieveContext(db, question, { limit = 6, embedder } = {}) {
-  const hits = hybridSearch(db, question, { mode: "hybrid", limit, embedder });
+export async function retrieveContext(db, question, { limit = 6, embedder } = {}) {
+  const queryVec = await resolveQueryVec(embedder, question);
+  const hits = hybridSearch(db, question, { mode: "hybrid", limit, embedder, queryVec });
   return hits.map((hit, i) => ({
     n: i + 1,
     file_id: hit.file_id,
@@ -115,7 +117,7 @@ export async function probeEndpoint(baseUrl, opts = {}) {
 export async function ask(db, question, opts) {
   const { config, embedder, limit = 6 } = opts;
   const doFetch = opts.fetchImpl ?? globalThis.fetch;
-  const context = retrieveContext(db, question, { limit, embedder });
+  const context = await retrieveContext(db, question, { limit, embedder });
 
   const rag = config.rag ?? {};
   const baseUrl = resolveBaseUrl(rag);

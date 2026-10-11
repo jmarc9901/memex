@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { buildMatch } from "../src/query.js";
 import { chunkText } from "../src/extract.js";
-import { openDatabase, search, stats, deleteFile } from "../src/db.js";
+import { openDatabase, search, stats, deleteFile, withTransaction } from "../src/db.js";
 import { indexFolder } from "../src/indexer.js";
 
 test("buildMatch une terminos con AND por defecto", () => {
@@ -92,6 +92,41 @@ test("el indexado es incremental (no reindexa sin cambios)", () => {
     // forzar reindexado
     const forced = indexFolder(db, root, { force: true });
     assert.equal(forced.updated, 3);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("withTransaction revierte todo si algo falla (reindexado atomico)", () => {
+  const root = makeCorpus();
+  const db = openDatabase(join(root, ".memex", "index.db"));
+  try {
+    indexFolder(db, root);
+    const before = stats(db).files;
+    assert.throws(
+      () =>
+        withTransaction(db, () => {
+          deleteFile(db, join(root, "notas.md"));
+          throw new Error("fallo simulado");
+        }),
+      /fallo simulado/
+    );
+    assert.equal(stats(db).files, before, "el archivo anterior no debe perderse");
+    assert.equal(search(db, buildMatch("ansiedad")).length, 1, "sigue buscable tras el rollback");
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("el indexado guarda el sha256 del contenido de los archivos de texto", () => {
+  const root = makeCorpus();
+  const db = openDatabase(join(root, ".memex", "index.db"));
+  try {
+    indexFolder(db, root);
+    const row = db.prepare("SELECT sha256 FROM files WHERE name = ?").get("notas.md");
+    assert.match(row.sha256, /^[0-9a-f]{64}$/);
   } finally {
     db.close();
     rmSync(root, { recursive: true, force: true });

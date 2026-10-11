@@ -145,3 +145,41 @@ test("GET /api/tools informa herramientas y configuracion", async () => {
     assert.equal(data.config.embed_provider, "hash");
   });
 });
+
+test("la API rechaza origenes remotos y permite extensiones y localhost", async () => {
+  await withServer(async (base) => {
+    // Una web cualquiera no puede leer el indice.
+    const evil = await fetch(`${base}/api/search?q=ansiedad`, {
+      headers: { origin: "https://evil.example" },
+    });
+    assert.equal(evil.status, 403);
+    assert.equal(evil.headers.get("access-control-allow-origin"), null);
+
+    // La extension del navegador si esta autorizada y recibe CORS reflejado.
+    const extOrigin = "chrome-extension://abcdefghijklmnop";
+    const ext = await fetch(`${base}/api/search?q=ansiedad`, {
+      headers: { origin: extOrigin },
+    });
+    assert.equal(ext.status, 200);
+    assert.equal(ext.headers.get("access-control-allow-origin"), extOrigin);
+    assert.equal(ext.headers.get("vary"), "Origin");
+
+    // El preflight tambien se corta para origenes no permitidos.
+    const preflight = await fetch(`${base}/api/search`, {
+      method: "OPTIONS",
+      headers: { origin: "https://evil.example" },
+    });
+    assert.equal(preflight.status, 403);
+  });
+});
+
+test("isAllowedOrigin acepta localhost y extensiones, y rechaza el resto", async () => {
+  const { isAllowedOrigin } = await import("../src/server.js");
+  assert.equal(isAllowedOrigin("http://127.0.0.1:4747"), true);
+  assert.equal(isAllowedOrigin("http://localhost:4747"), true);
+  assert.equal(isAllowedOrigin("chrome-extension://abc"), true);
+  assert.equal(isAllowedOrigin("moz-extension://abc"), true);
+  assert.equal(isAllowedOrigin("https://evil.example"), false);
+  assert.equal(isAllowedOrigin("http://localhost.evil.example"), false);
+  assert.equal(isAllowedOrigin(undefined), false);
+});

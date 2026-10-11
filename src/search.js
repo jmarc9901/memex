@@ -1,8 +1,9 @@
 // Memex Offline - busqueda hibrida: full-text (BM25) + semantica (coseno),
 // fusionadas con Reciprocal Rank Fusion (RRF). Sin GPU y sin red.
-import { search as lexicalSearch, chunksWithEmbeddings } from "./db.js";
+import { search as lexicalSearch } from "./db.js";
 import { buildMatch } from "./query.js";
-import { cosine, fromBlob, tokenize } from "./embeddings.js";
+import { tokenize } from "./embeddings.js";
+import { getStore, semanticSearch } from "./vectorstore.js";
 
 const RRF_K = 60;
 // Similitud coseno minima para aceptar un candidato semantico. Los embeddings
@@ -30,7 +31,7 @@ const SEMANTIC_MIN_SCORE = 0.1;
  * Busca en el indice combinando recuperacion lexica y semantica.
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {string} queryText
- * @param {{mode?:'lexical'|'semantic'|'hybrid', limit?:number, any?:boolean, minScore?:number, embedder?:((t:string)=>Float32Array)|null, weights?:{lexical?:number,semantic?:number}}} [opts]
+ * @param {{mode?:'lexical'|'semantic'|'hybrid', limit?:number, any?:boolean, minScore?:number, embedder?:((t:string)=>Float32Array)|null, queryVec?:Float32Array|null, weights?:{lexical?:number,semantic?:number}}} [opts]
  * @returns {SearchHit[]}
  */
 export function hybridSearch(db, queryText, opts = {}) {
@@ -41,14 +42,36 @@ export function hybridSearch(db, queryText, opts = {}) {
   const weights = { lexical: 1, semantic: 1, ...(opts.weights ?? {}) };
   const candidates = Math.max(limit * 5, 50);
 
+  // Vector de consulta: si el embedder es sincrono (hash) lo calculamos aqui;
+  // si es asincrono (onnx), el llamante ya debe pasar `queryVec` resuelto.
+  const queryVec = opts.queryVec ?? syncQueryVec(opts.embedder, queryText);
+
   const lexical = mode === "semantic" ? [] : lexicalHits(db, queryText, candidates, any);
   const semantic =
-    mode === "lexical" ? [] : semanticHits(db, queryText, candidates, opts.embedder, minScore);
+    mode === "lexical" ? [] : semanticHits(db, queryText, candidates, queryVec, minScore);
 
   if (mode === "lexical") return lexical.slice(0, limit);
   if (mode === "semantic") return semantic.slice(0, limit);
 
   return fuse(lexical, semantic, weights).slice(0, limit);
+}
+
+/** Calcula el vector de consulta solo si el embedder es sincrono. */
+export function syncQueryVec(embedder, queryText) {
+  if (!embedder) return null;
+  const maybe = embedder(queryText);
+  return maybe && typeof maybe.then !== "function" ? maybe : null;
+}
+
+/**
+ * Resuelve el vector de consulta con un embedder sync o async.
+ * @param {Function|null} embedder
+ * @param {string} queryText
+ * @returns {Promise<Float32Array|null>}
+ */
+export async function resolveQueryVec(embedder, queryText) {
+  if (!embedder) return null;
+  return await embedder(queryText);
 }
 
 function lexicalHits(db, queryText, candidates, any = false) {
@@ -72,28 +95,20 @@ function lexicalHits(db, queryText, candidates, any = false) {
   }));
 }
 
-function semanticHits(db, queryText, candidates, embedder, minScore = SEMANTIC_MIN_SCORE) {
-  if (!embedder) return [];
-  const queryVec = embedder(queryText);
-  const rows = chunksWithEmbeddings(db);
-  if (!rows.length) return [];
+function semanticHits(db, queryText, candidates, queryVec, minScore = SEMANTIC_MIN_SCORE) {
+  if (!queryVec) return [];
+  const hits = semanticSearch(db, queryVec, { k: candidates, minScore });
+  if (!hits.length) return [];
+  const store = getStore(db);
+  if (!store) return [];
 
-  const scored = [];
-  for (const row of rows) {
-    const vec = fromBlob(row.embedding);
-    if (!vec) continue;
-    const score = cosine(queryVec, vec);
-    if (score >= minScore) scored.push({ row, score });
-  }
-  scored.sort((a, b) => b.score - a.score);
-
-  return scored.slice(0, candidates).map(({ row, score }, i) => ({
-    file_id: row.file_id,
-    path: row.path,
-    name: row.name,
-    ext: row.ext,
-    chunk_index: row.chunk_index,
-    snippet: makeSnippet(row.content, queryText),
+  return hits.map(({ index, score }, i) => ({
+    file_id: store.fileIds[index],
+    path: store.paths[index],
+    name: store.names[index],
+    ext: store.exts[index],
+    chunk_index: store.chunkIndexes[index],
+    snippet: makeSnippet(store.contents[index], queryText),
     semantic_rank: i,
     semantic_score: score,
     lexical_rank: null,

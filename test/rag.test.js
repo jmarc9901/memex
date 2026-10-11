@@ -79,10 +79,10 @@ test("buildPrompt numera el contexto y pide citas", () => {
   assert.match(prompt.system, /\[n\]/);
 });
 
-test("retrieveContext devuelve fragmentos numerados sin marcadores", () => {
+test("retrieveContext devuelve fragmentos numerados sin marcadores", async () => {
   const { root, db } = makeDb();
   try {
-    const context = retrieveContext(db, "conclusiones proyecto", { limit: 3 });
+    const context = await retrieveContext(db, "conclusiones proyecto", { limit: 3 });
     assert.ok(context.length >= 1);
     assert.equal(context[0].n, 1);
     assert.doesNotMatch(context[0].text, /\[\[/);

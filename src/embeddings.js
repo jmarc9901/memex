@@ -1,12 +1,17 @@
 // Memex Offline - embeddings en CPU, sin GPU y sin red por defecto.
 //
-// Proveedor por defecto "hash": bolsa de palabras hasheada (feature hashing)
-// sobre unigramas y bigramas, normalizada L2. Es determinista, instantanea y
-// no necesita dependencias, asi que la busqueda por significado funciona sin
-// instalar nada. Si el usuario instala onnxruntime-node, se puede activar el
-// proveedor "onnx" con un modelo real (p.ej. all-MiniLM-L6-v2).
-
-import { createRequire } from "node:module";
+// Dos proveedores:
+//   - "hash" (por defecto): bolsa de palabras hasheada (feature hashing) sobre
+//     unigramas, bigramas y trigramas de caracteres, normalizada L2. Es
+//     determinista, instantanea y no necesita dependencias. Captura
+//     solapamiento LEXICO tolerante a erratas (p. ej. "cancion" ~ "canción"),
+//     pero no sinonimos ni parafrasis sin palabras en comun.
+//   - "onnx": embeddings neuronales reales (semantica de significado) con un
+//     modelo BERT local (all-MiniLM-L6-v2). Requiere instalar onnxruntime-node
+//     y apuntar `embed_model` al .onnx; es OPCIONAL y, si falta algo, se avisa
+//     y se cae al proveedor "hash".
+import { existsSync } from "node:fs";
+import { createOnnxEmbedder, onnxAvailable } from "./onnx.js";
 
 const ACCENTS = /[\u0300-\u036f]/g;
 const TOKEN_RE = /[\p{L}\p{N}]+/gu;
@@ -92,30 +97,53 @@ export function fromBlob(blob) {
   return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
 }
 
+/** ¿El embedder es asincrono (p. ej. el neuronal ONNX)? */
+export function isAsyncEmbedder(embedder) {
+  return Boolean(embedder && embedder.provider === "onnx");
+}
+
+/**
+ * Calcula un vector con un embedder sync u async (siempre devuelve Promise).
+ * @param {Function|null} embedder
+ * @param {string} text
+ * @returns {Promise<Float32Array|null>}
+ */
+export async function embedText(embedder, text) {
+  if (!embedder) return null;
+  return await embedder(text);
+}
+
 /**
  * Crea el proveedor de embeddings segun configuracion.
- * Devuelve una funcion `(text) => Float32Array`.
- * @param {{embed_provider?:string, embed_dim?:number}} config
+ * Devuelve una funcion `(text) => Float32Array` (hash) o
+ * `(text) => Promise<Float32Array>` (onnx).
+ * @param {{embed_provider?:string, embed_dim?:number, embed_model?:string, embed_tokenizer?:string}} config
  */
 export function createEmbedder(config = {}) {
   const dim = config.embed_dim ?? 256;
   const provider = config.embed_provider ?? "hash";
 
   if (provider === "onnx") {
-    // Carga diferida: solo si el usuario instalo onnxruntime-node.
-    const require = createRequire(import.meta.url);
-    let onnxInstalled = true;
-    try {
-      require("onnxruntime-node");
-    } catch {
-      // onnxruntime-node no instalado: caemos al proveedor hash sin fallar.
-      onnxInstalled = false;
-    }
-    if (onnxInstalled) {
-      throw new Error(
-        'proveedor "onnx": onnxruntime-node esta instalado pero aun no hay un modelo configurado. ' +
-          "Define el modelo y adapta createEmbedder, o usa embed_provider=\"hash\"."
+    const model = config.embed_model ? config.embed_model : "";
+    if (!onnxAvailable()) {
+      process.emitWarning(
+        'embed_provider="onnx" pero onnxruntime-node no esta instalado; se usa "hash". ' +
+          "Instala onnxruntime-node para la busqueda neuronal.",
+        { code: "MEMEX_ONNX_FALLBACK" }
       );
+    } else if (!model || !existsSync(model)) {
+      process.emitWarning(
+        'embed_provider="onnx" pero falta el modelo (define embed_model a un .onnx valido); se usa "hash".',
+        { code: "MEMEX_ONNX_FALLBACK" }
+      );
+    } else {
+      const onnx = createOnnxEmbedder({
+        model,
+        tokenizer: config.embed_tokenizer,
+        maxLen: config.embed_max_len,
+      });
+      onnx.dim = dim;
+      return onnx;
     }
   }
 

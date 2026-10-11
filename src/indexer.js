@@ -1,13 +1,25 @@
 // Memex Offline - orquestacion del indexado incremental.
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { basename, extname } from "node:path";
 import { walkFiles, extractText, chunkText, DEFAULT_IGNORES } from "./extract.js";
-import { deleteFile, getIndexedFile, getFileByPath, insertFile, setMeta } from "./db.js";
+import {
+  chunksPendingEmbedding,
+  clearEmbeddings,
+  deleteFile,
+  getFileByPath,
+  getIndexedFile,
+  insertFile,
+  setChunkEmbedding,
+  setMeta,
+  withTransaction,
+} from "./db.js";
 
-function sha256(path) {
+/** Hash del contenido ya en memoria (evita releer el archivo del disco). */
+function sha256Buffer(buf) {
+  if (!buf || !buf.length) return null;
   try {
-    return createHash("sha256").update(readFileSync(path)).digest("hex");
+    return createHash("sha256").update(buf).digest("hex");
   } catch {
     return null;
   }
@@ -51,7 +63,9 @@ export function indexFolder(db, root, opts = {}) {
     }
 
     const existing = getIndexedFile(db, path);
-    const mtime = Math.floor(st.mtimeMs);
+    // mtime en milisegundos (sin truncar a segundos) para detectar cambios
+    // rapidos aunque el tamano no varie.
+    const mtime = st.mtimeMs;
     if (
       !opts.force &&
       existing &&
@@ -81,17 +95,20 @@ export function indexFolder(db, root, opts = {}) {
       : pieces.map((content) => ({ content }));
 
     try {
-      if (existing) deleteFile(db, path);
-      insertFile(db, {
-        path,
-        name: basename(path),
-        ext: extname(path).toLowerCase(),
-        size: st.size,
-        mtime,
-        sha256: sha256(path),
-        status: "indexed",
-        source: extracted.extractor,
-        chunks,
+      // Atomico: si el insert falla, el archivo anterior no se pierde.
+      withTransaction(db, () => {
+        if (existing) deleteFile(db, path);
+        insertFile(db, {
+          path,
+          name: basename(path),
+          ext: extname(path).toLowerCase(),
+          size: st.size,
+          mtime,
+          sha256: sha256Buffer(extracted.buffer),
+          status: "indexed",
+          source: extracted.extractor,
+          chunks,
+        });
       });
       if (existing) summary.updated += 1;
       else summary.added += 1;
@@ -122,21 +139,71 @@ export function saveDocument(db, doc) {
     : pieces.map((content) => ({ content }));
 
   const existing = getFileByPath(db, path);
-  if (existing) deleteFile(db, path);
 
   const now = Date.now();
-  insertFile(db, {
-    path,
-    name: title || path,
-    ext: ".web",
-    size: Buffer.byteLength(body, "utf8"),
-    mtime: now,
-    status: "indexed",
-    source,
-    url,
-    title,
-    chunks,
+  withTransaction(db, () => {
+    if (existing) deleteFile(db, path);
+    insertFile(db, {
+      path,
+      name: title || path,
+      ext: ".web",
+      size: Buffer.byteLength(body, "utf8"),
+      mtime: now,
+      status: "indexed",
+      source,
+      url,
+      title,
+      chunks,
+    });
   });
 
   return { file_id: getFileByPath(db, path).id, chunks: chunks.length, updated: Boolean(existing) };
+}
+
+/**
+ * Calcula los embeddings de los chunks pendientes (o de todos con `force`)
+ * usando un embedder sync u async. Pensado para el proveedor neuronal "onnx",
+ * que no puede ejecutarse dentro del indexado sincrono.
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @param {{embedder:Function, force?:boolean, all?:boolean,
+ *          onProgress?:(info:{done:number,total:number})=>void}} opts
+ * @returns {Promise<{pending:number, embedded:number, failed:number, provider:string, dim:number|undefined}>}
+ */
+export async function embedIndex(db, opts) {
+  const embedder = opts.embedder;
+  if (!embedder) throw new Error("embedIndex requiere un embedder");
+  if (opts.force) clearEmbeddings(db);
+
+  const pending = chunksPendingEmbedding(db, { all: Boolean(opts.force || opts.all) });
+  let embedded = 0;
+  let failed = 0;
+  let done = 0;
+
+  // Transaccion manual (no podemos usar withTransaction con un bucle async).
+  db.exec("BEGIN");
+  try {
+    for (const row of pending) {
+      try {
+        const vec = await embedder(row.content);
+        setChunkEmbedding(db, row.chunk_id, vec);
+        embedded += 1;
+      } catch {
+        failed += 1;
+      }
+      done += 1;
+      opts.onProgress?.({ done, total: pending.length });
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      /* ya cerrada */
+    }
+    throw err;
+  }
+
+  if (embedder.provider) setMeta(db, "embed_provider", embedder.provider);
+  if (embedder.dim) setMeta(db, "embed_dim", embedder.dim);
+  return { pending: pending.length, embedded, failed, provider: embedder.provider, dim: embedder.dim };
 }

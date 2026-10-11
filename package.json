@@ -1,6 +1,6 @@
 {
   "name": "memex",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Memex Offline - tu buscador personal 100% offline (full-text FTS5 + embeddings en CPU, sin LLM, sin GPU, sin dependencias)",
   "type": "module",
   "license": "MIT",
@@ -35,6 +35,8 @@
   },
   "scripts": {
     "test": "node --test",
+    "check": "node scripts/check.js",
+    "prepublishOnly": "npm run check && npm test",
     "start": "node bin/memex.js serve",
     "serve": "node bin/memex.js serve"
   },
@@ -45,6 +47,7 @@
     "extension",
     "docs",
     "README.md",
+    "README.en.md",
     "LICENSE"
   ]
 }

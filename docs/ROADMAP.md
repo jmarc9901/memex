@@ -26,17 +26,21 @@ Principios:
 
 - Indexar todo el disco: PDFs, TXT, Markdown, código, imágenes (OCR), audio y
   vídeo (transcripción), páginas web guardadas.
-- Búsqueda full-text **y** semántica: por palabras exactas o por significado.
+- Búsqueda full-text **y** semántica: por palabras exactas, por similitud léxica
+  tolerante a erratas o, opcionalmente, por significado con embeddings
+  neuronales locales (ver Ruta 1).
 - Preguntas en lenguaje natural, con citas a los archivos locales.
 - Trails asociativos entre documentos, exportables.
 - Un servidor local con GUI web y una extensión de navegador.
+- Un servidor **MCP** local (stdio) para que los agentes de IA consulten tu
+  índice sin subir nada a la nube.
 
 ## Fases
 
 | Fase | Qué | Estado | Módulo |
 | --- | --- | --- | --- |
 | 1 | CLI que indexa una carpeta y permite búsqueda full-text | ✅ Hecho | `src/indexer.js`, `src/db.js`, `src/query.js` |
-| 2 | Búsqueda semántica con embeddings en CPU + fusión RRF | ✅ Hecho | `src/embeddings.js`, `src/search.js` |
+| 2 | Búsqueda difusa (embeddings léxicos en CPU) + fusión RRF | ✅ Hecho | `src/embeddings.js`, `src/search.js` |
 | 3 | OCR para imágenes y PDFs escaneados | ✅ Hecho (opcional) | `src/ocr.js` |
 | 4 | Transcripción de audio/vídeo | ✅ Hecho (opcional) | `src/media.js` |
 | 5 | Preguntas y respuestas con RAG (proveedor opcional) | ✅ Hecho | `src/rag.js` |
@@ -45,14 +49,26 @@ Principios:
 | 8 | Extensión de navegador para guardar páginas | ✅ Hecho | `extension/` |
 | 9 | LLM local: detección de servidores y auto-selección de modelo | ✅ Hecho | `src/rag.js`, `src/doctor.js` |
 | 10 | Indexado de archivos comprimidos (ZIP y gzip) | ✅ Hecho | `src/archive.js` |
+| 11 | Embeddings neuronales opcionales (ONNX) para semántica real | ✅ Hecho (opcional) | `src/onnx.js`, `src/embeddings.js` |
+| 12 | Gestión de configuración por CLI (`memex config`) | ✅ Hecho | `src/config.js`, `src/cli.js` |
+| 13 | Índice vectorial en memoria + prefiltro binario (escala) | ✅ Hecho | `src/vectorstore.js` |
+| 14 | Servidor MCP local (stdio) para agentes de IA | ✅ Hecho | `src/mcp.js` |
+| 15 | Onboarding en un comando (`memex init`) | ✅ Hecho | `src/init.js` |
 
 ## Rutas de IA (todas opcionales)
 
 ### Ruta 1 — MVP puro, sin IA
 
-Búsqueda full-text (SQLite FTS5, ranking BM25) más búsqueda "por significado"
-mediante *feature hashing* sobre unigramas, bigramas y trigramas. Todo local,
-determinista y sin dependencias. Es la base y funciona siempre.
+Búsqueda full-text (SQLite FTS5, ranking BM25) más búsqueda difusa mediante
+*feature hashing* sobre unigramas, bigramas y trigramas de caracteres. Es una
+coincidencia **léxica** tolerante a erratas (no entiende sinónimos ni
+paráfrasis sin palabras en común). Todo local, determinista y sin
+dependencias: es la base y funciona siempre.
+
+La **semántica neuronal real es opcional** (Fase 11): con `embed_provider:
+"onnx"` y un modelo BERT local (all-MiniLM-L6-v2) se calculan embeddings de
+significado con `memex embed`. Requiere instalar `onnxruntime-node` y apuntar
+`embed_model` al .onnx; si falta algo, se avisa y se cae al proveedor `hash`.
 
 ### Ruta 2 — Capa de IA opcional (API compatible OpenAI)
 
@@ -92,4 +108,6 @@ clave ni conexión. La calidad de las respuestas depende del modelo elegido.
    RAM). Genera confianza.
 4. Publica en r/selfhosted, r/LocalLLaMA y r/DataHoarder con el ángulo:
    *"Construí un Memex offline que funciona sin GPU y sin LLM local"*.
-5. Añade la capa de API remota como extra opcional.
+5. Añade la capa de API remota como extra opcional. ✅ Hecho (Ruta 2).
+6. Documenta los embeddings neuronales opcionales (ONNX) como diferenciador
+   sin GPU obligatoria. ✅ Documentado en el README.

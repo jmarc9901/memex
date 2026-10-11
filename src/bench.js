@@ -6,9 +6,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase, stats } from "./db.js";
-import { indexFolder } from "./indexer.js";
-import { hybridSearch } from "./search.js";
-import { tokenize } from "./embeddings.js";
+import { embedIndex, indexFolder } from "./indexer.js";
+import { hybridSearch, resolveQueryVec } from "./search.js";
+import { isAsyncEmbedder, tokenize } from "./embeddings.js";
 
 const ms = (startNs, endNs) => Number(endNs - startNs) / 1e6;
 const round = (n, d = 2) => (Number.isFinite(n) ? Number(n.toFixed(d)) : null);
@@ -18,24 +18,30 @@ const round = (n, d = 2) => (Number.isFinite(n) ? Number(n.toFixed(d)) : null);
  * @param {string} root carpeta a indexar
  * @param {{embedder?:Function|null, queries?:string[]|null, limit?:number, mode?:string}} [opts]
  */
-export function benchmark(root, opts = {}) {
+export async function benchmark(root, opts = {}) {
   const { embedder = null, queries = null, limit = 10, mode = "hybrid" } = opts;
   const dir = mkdtempSync(join(tmpdir(), "memex-bench-"));
   const db = openDatabase(join(dir, "bench.db"));
+  const asyncEmbedder = isAsyncEmbedder(embedder);
   try {
     const t0 = process.hrtime.bigint();
-    const summary = indexFolder(db, root, { embedder, force: true });
+    const summary = indexFolder(db, root, { embedder: asyncEmbedder ? null : embedder, force: true });
+    const vectors = asyncEmbedder
+      ? await embedIndex(db, { embedder, force: true })
+      : { embedded: 0 };
     const t1 = process.hrtime.bigint();
     const indexMs = ms(t0, t1);
 
     const s = stats(db);
     const usedQueries = queries && queries.length ? queries : deriveQueries(db);
-    const results = usedQueries.map((q) => {
+    const results = [];
+    for (const q of usedQueries) {
       const a = process.hrtime.bigint();
-      const hits = hybridSearch(db, q, { mode, limit, embedder });
+      const queryVec = await resolveQueryVec(embedder, q);
+      const hits = hybridSearch(db, q, { mode, limit, embedder, queryVec });
       const b = process.hrtime.bigint();
-      return { query: q, ms: round(ms(a, b)), hits: hits.length };
-    });
+      results.push({ query: q, ms: round(ms(a, b)), hits: hits.length });
+    }
 
     return {
       root,
@@ -43,7 +49,7 @@ export function benchmark(root, opts = {}) {
       scanned: summary.scanned,
       indexed: summary.added + summary.updated,
       chunks: s.chunks,
-      embedded: s.embedded,
+      embedded: asyncEmbedder ? vectors.embedded : s.embedded,
       index_ms: round(indexMs),
       files_per_s: indexMs > 0 ? round(summary.scanned / (indexMs / 1000)) : null,
       search_ms: summarize(results.map((r) => r.ms)),

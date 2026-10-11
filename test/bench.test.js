@@ -14,10 +14,10 @@ function makeCorpus() {
   return root;
 }
 
-test("benchmark indexa en un indice desechable y mide busquedas", () => {
+test("benchmark indexa en un indice desechable y mide busquedas", async () => {
   const root = makeCorpus();
   try {
-    const r = benchmark(root, { embedder: createEmbedder({}), limit: 5 });
+    const r = await benchmark(root, { embedder: createEmbedder({}), limit: 5 });
     assert.equal(r.scanned, 2);
     assert.equal(r.indexed, 2);
     assert.ok(r.chunks >= 1);
@@ -31,10 +31,10 @@ test("benchmark indexa en un indice desechable y mide busquedas", () => {
   }
 });
 
-test("benchmark acepta consultas explicitas y sin embeddings", () => {
+test("benchmark acepta consultas explicitas y sin embeddings", async () => {
   const root = makeCorpus();
   try {
-    const r = benchmark(root, { queries: ["ansiedad"], limit: 3 });
+    const r = await benchmark(root, { queries: ["ansiedad"], limit: 3 });
     assert.equal(r.embedded, 0);
     assert.equal(r.queries.length, 1);
     assert.equal(r.queries[0].query, "ansiedad");

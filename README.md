@@ -1,9 +1,12 @@
 # Memex Offline
 
+> English: [README.en.md](README.en.md)
+
 Tu propio buscador personal, **100% offline**, que indexa lo que tienes en el
 disco: texto, notas, código, PDFs, imágenes (OCR), audio y vídeo. Busca por
-palabras exactas y por significado, responde preguntas con citas a tus archivos
-y crea *trails* (caminos asociativos) entre documentos.
+palabras exactas (léxico, ranking BM25) y por coincidencia difusa de texto
+(*embeddings* léxicos), responde preguntas con citas a tus archivos y crea
+*trails* (caminos asociativos) entre documentos.
 
 **Sin nube, sin telemetría, sin GPU y sin dependencias** (solo Node.js). La capa
 de IA generativa es **opcional**: el proyecto funciona por completo sin ella.
@@ -31,6 +34,9 @@ comando `memex` disponible en el `PATH`.
 ## Uso rápido
 
 ```bash
+# 0. Onboarding en un comando: modelo + config + índice (todo local)
+node bin/memex.js init ~/Documentos
+
 # 1. Indexar una carpeta (incremental: solo reprocesa lo que cambió)
 node bin/memex.js index ~/Documentos
 
@@ -39,7 +45,7 @@ node bin/memex.js search "ansiedad"
 node bin/memex.js search '"proyecto x" 2024'          # frase exacta
 node bin/memex.js search "informe*"                    # prefijo
 node bin/memex.js search "ansiedad embeddings" --any   # OR en vez de AND
-node bin/memex.js search "como me sentia" --mode semantic
+node bin/memex.js search "como me sentia" --mode semantic  # similitud difusa (no neuronal)
 
 # 3. Preguntar en lenguaje natural (RAG opcional; sin config, muestra fuentes)
 node bin/memex.js ask "¿qué conclusiones saqué del proyecto X?"
@@ -52,6 +58,7 @@ node bin/memex.js serve        # http://127.0.0.1:4747
 
 | Comando | Descripción |
 | --- | --- |
+| `init [carpeta]` | Onboarding en un paso: prepara el modelo, escribe la config e indexa. |
 | `index [carpeta]` | Indexa (o reindexa) una carpeta de forma incremental. Por defecto, la carpeta actual. |
 | `search <consulta>` | Búsqueda híbrida (léxica + semántica) con ranking. Alias: `find`. |
 | `ask <pregunta>` | RAG: recupera contexto local y, si hay proveedor configurado, genera una respuesta. |
@@ -60,11 +67,14 @@ node bin/memex.js serve        # http://127.0.0.1:4747
 | `trails` | Lista los trails existentes. |
 | `trail create/add/link/show/rm` | Crea y edita trails asociativos. |
 | `serve` | Arranca la API local y la GUI web. |
+| `mcp` | Arranca un servidor MCP local (stdio) para agentes de IA. |
 | `doctor` | Diagnóstico: herramientas externas, configuración efectiva y (`--ping`) servidores RAG locales. |
 | `models` | Lista los modelos ofrecidos por los servidores LLM locales detectados. |
 | `bench [carpeta]` | Benchmark reproducible de indexado y búsqueda sobre un índice desechable. |
 | `stats` | Estadísticas del índice (archivos, fragmentos, vectores, trails). |
 | `clear` | Vacía el índice (documentos, chunks y trails). |
+| `embed [carpeta]` | Mantiene el texto al día y calcula los embeddings pendientes. Con el proveedor `onnx`, calcula los vectores neuronales. `--force` los recomputa todos. |
+| `config show\|set\|path` | Muestra o edita la configuración efectiva (`config set rag.provider ollama`). |
 
 ### Opciones comunes
 
@@ -73,7 +83,7 @@ node bin/memex.js serve        # http://127.0.0.1:4747
 | `--db RUTA` | Base de datos del índice (por defecto `./.memex/index.db`, o `$MEMEX_DB`). |
 | `--force` | Reindexa todo ignorando la caché por fecha/tamaño. |
 | `--no-embed` | Indexa solo texto, sin calcular embeddings. |
-| `--mode` | `hybrid` (defecto), `lexical` o `semantic`. |
+| `--mode` | `hybrid` (defecto), `lexical` o `semantic`. El modo `semantic` usa *embeddings* léxicos locales (coincidencia difusa), **no** semántica neuronal; ver [Limitaciones](#limitaciones). |
 | `-n`, `--limit` | Número máximo de resultados (por defecto 20). |
 | `--any` | Une los términos con OR. |
 | `--format` | Formato de `export`: `jsonl`, `csv` o `md`. |
@@ -118,6 +128,7 @@ La GUI se apoya en la misma API que consume la extensión:
 | `POST` | `/api/save` | Guardar un documento (`{url,title,text}`). |
 | `POST` | `/api/ask` | Pregunta RAG. |
 | `POST` | `/api/index` | Indexar una carpeta (`{path}`). |
+| `POST` | `/api/embed` | Indexar y calcular los embeddings pendientes (`{path, force?}`). |
 | `GET` | `/api/tools` | Herramientas opcionales disponibles y configuración. |
 | `GET` | `/api/config` | Configuración activa. |
 
@@ -139,6 +150,8 @@ El archivo de config se busca, por orden, en `$MEMEX_CONFIG`,
 {
   "embed_provider": "hash",
   "embed_dim": 256,
+  "embed_model": "",
+  "embed_tokenizer": "",
   "rag": {
     "enabled": false,
     "provider": "openai-compatible",
@@ -150,9 +163,11 @@ El archivo de config se busca, por orden, en `$MEMEX_CONFIG`,
 }
 ```
 
-`rag.provider` acepta `openai-compatible`, `groq`, `openrouter` y los presets
-locales `ollama` (`127.0.0.1:11434`), `llamacpp` (`127.0.0.1:8080`) y `lmstudio`
-(`127.0.0.1:1234`). Los proveedores locales no necesitan `api_key`.
+`rag.provider` acepta `openai-compatible`, `groq`, `openrouter`, `gemini`
+(Google) y los presets locales `ollama` (`127.0.0.1:11434`), `llamacpp`
+(`127.0.0.1:8080`) y `lmstudio` (`127.0.0.1:1234`). Los proveedores locales no
+necesitan `api_key`. Cloudflare Workers AI se usa vía `base_url` (la URL incluye
+el `account_id`), ya que es específica de cada cuenta.
 
 ### LLM local (Ruta 3)
 
@@ -169,10 +184,50 @@ node bin/memex.js ask "¿qué conclusiones saqué?"
 
 Todo el flujo (recuperación y generación) ocurre en tu máquina.
 
-Variables de entorno: `MEMEX_DB`, `MEMEX_CONFIG`, `MEMEX_EMBED_PROVIDER`,
-`MEMEX_EMBED_DIM`, `MEMEX_RAG_API_KEY`, `MEMEX_RAG_BASE_URL`,
-`MEMEX_RAG_MODEL`, `MEMEX_RAG_PROVIDER`, `MEMEX_PORT`, `MEMEX_OCR_LANG`,
-`MEMEX_WHISPER_MODEL`.
+Variables de entorno: `MEMEX_DB`, `MEMEX_CONFIG`, `MEMEX_MODELS_DIR`,
+`MEMEX_EMBED_PROVIDER`, `MEMEX_EMBED_DIM`, `MEMEX_EMBED_MODEL`,
+`MEMEX_EMBED_TOKENIZER`, `MEMEX_EMBED_MAX_LEN`, `MEMEX_RAG_API_KEY`,
+`MEMEX_RAG_BASE_URL`, `MEMEX_RAG_MODEL`, `MEMEX_RAG_PROVIDER`, `MEMEX_PORT`,
+`MEMEX_OCR_LANG`, `MEMEX_WHISPER_MODEL`.
+
+## Servidor MCP (para agentes de IA)
+
+`memex mcp` expone tu índice local como herramientas MCP por **stdio**, todo en
+tu máquina (no hay que alojar nada). Claude Desktop, Cursor, Continue o cualquier
+cliente MCP pueden buscar en tus archivos. Herramientas: `memex_search`,
+`memex_ask`, `memex_relate`, `memex_trails`, `memex_trail_show`, `memex_stats`,
+`memex_index`.
+
+```json
+{
+  "mcpServers": {
+    "memex": { "command": "node", "args": ["/ruta/a/memex/bin/memex.js", "mcp"] }
+  }
+}
+```
+
+### Embeddings neuronales (opcional, Ruta 1 ampliada)
+
+Por defecto los *embeddings* son "hash" (léxicos). Para semántica **real**
+(sinónimos, paráfrasis) puedes usar un modelo BERT local ejecutado con
+`onnxruntime-node`. Es totalmente opcional y sigue siendo offline:
+
+```bash
+# 1. Instala el runtime (dependencia opcional, solo si quieres onnx)
+npm install onnxruntime-node
+# 2. Descarga all-MiniLM-L6-v2 en onnx + su vocab.txt (p. ej. desde HF)
+# 3. Configúralo apuntando al modelo local
+node bin/memex.js config set embed_provider onnx
+node bin/memex.js config set embed_dim 384
+node bin/memex.js config set embed_model /ruta/all-MiniLM-L6-v2.onnx
+# 4. Indexa y calcula los vectores
+node bin/memex.js index ~/Documentos
+node bin/memex.js embed ~/Documentos
+```
+
+Si falta `onnxruntime-node` o el modelo, se avisa y se usa el proveedor
+`hash` sin fallar. Al cambiar de proveedor hay que recalcular los vectores
+(`embed --force`) para que las dimensiones coincidan.
 
 ## Qué indexa
 
@@ -198,8 +253,10 @@ Se ignoran archivos binarios, carpetas como `.git`, `node_modules`, `dist`,
    `chunkText` lo trocea en fragmentos de ~1600 caracteres respetando párrafos.
 3. Cada fragmento va a la tabla `chunks` y a la tabla virtual FTS5 `chunks_fts`
    (tokenizer `unicode61 remove_diacritics 2`: *cancion* encuentra *Canción*).
-4. Los embeddings (feature hashing en CPU, 256 dims, sin dependencias) se
-   guardan como BLOB en `chunks.embedding`.
+4. Los embeddings se guardan como BLOB en `chunks.embedding`. Por defecto son
+   *feature hashing* en CPU (256 dims, sin dependencias): **léxicos**, toleran
+   erratas pero no sinónimos. Con `embed_provider: "onnx"` se calculan vectores
+   neuronales reales con un modelo BERT local (`memex embed`).
 5. `hybridSearch` combina el ranking BM25 con la similitud coseno y fusiona
    ambas listas con **Reciprocal Rank Fusion**.
 6. `ask` recupera los fragmentos más relevantes y construye un prompt con citas.
@@ -218,6 +275,7 @@ src/extract.js    recorrido, extracción y chunking
 src/archive.js    lectura de ZIP/gzip sin dependencias
 src/query.js      construcción de consultas FTS5
 src/embeddings.js embeddings en CPU (hash) y utilidades de vectores
+src/onnx.js       embeddings neuronales opcionales (ONNX: tokenizer + pooling)
 src/search.js     búsqueda híbrida + fusión RRF
 src/rag.js        recuperación + generación opcional
 src/trails.js     trails asociativos y relación entre documentos
@@ -260,6 +318,29 @@ archivos/s, la mediana de latencia de búsqueda y el RSS, y borra todo al salir.
 
 La visión completa (fases, rutas de IA y proveedores gratuitos) está en
 [docs/ROADMAP.md](docs/ROADMAP.md). Estado actual: **fases 1-8 implementadas**.
+
+## Limitaciones
+
+- **La búsqueda "semántica" es léxica por defecto.** Sin configurar nada, los
+  vectores usan *feature hashing* (solapamiento léxico tolerante a erratas),
+  no significado: una paráfrasis sin palabras en común no aparecerá. Para
+  semántica real, activa el proveedor `onnx` (ver más arriba); es opcional y
+  requiere instalar un runtime y un modelo local.
+- **El índice semántico se puntúa en CPU sobre todos los fragmentos con
+  vector** (escaneo lineal). Es suficiente para corpus personales (decenas de
+  miles de fragmentos), pero no está pensado para millones.
+- Las herramientas opcionales (PDF, OCR, transcripción) requieren binarios
+  externos; sin ellos esas partes simplemente se omiten.
+
+## Privacidad y seguridad
+
+- El servidor escucha **solo en localhost** y sirve la GUI desde ahí.
+- La API rechaza peticiones con un `Origin` que no sea de `localhost`/`127.0.0.1`
+  ni de una extensión de navegador, de modo que una web que visites no puede
+  leer ni escribir en tu índice. Las extensiones solo hablan con
+  `127.0.0.1`/`localhost`.
+- Sin nube y sin telemetría: toda la recuperación ocurre en tu máquina. El
+  único tráfico de red es hacia el proveedor RAG que configures (opcional).
 
 ## Licencia
 

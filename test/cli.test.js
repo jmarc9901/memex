@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { parseArgs, formatExport, run } from "../src/cli.js";
+import { loadConfig } from "../src/config.js";
 
 /** Colector que imita un stream de salida. */
 function collector() {
@@ -115,6 +116,33 @@ test("run() export escribe a stdout ya un archivo", async () => {
     assert.equal(lines.length, 1);
     assert.equal(JSON.parse(lines[0]).name, "diario.md");
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run() config set escribe y loadConfig lo refleja", async () => {
+  const root = mkdtempSync(join(tmpdir(), "memex-config-"));
+  const prev = process.env.MEMEX_CONFIG;
+  process.env.MEMEX_CONFIG = join(root, "config.json");
+  try {
+    const setOut = collector();
+    await run(["config", "set", "rag.provider", "ollama"], { stdout: setOut });
+    assert.match(setOut.text, /rag\.provider/);
+    assert.equal(loadConfig().rag.provider, "ollama");
+
+    const numOut = collector();
+    await run(["config", "set", "server.port", "8080"], { stdout: numOut });
+    assert.equal(loadConfig().server.port, 8080);
+
+    const show = collector();
+    await run(["config", "show", "--json"], { stdout: show });
+    const data = JSON.parse(show.text);
+    assert.equal(data.config.rag.provider, "ollama");
+    assert.equal(data.config.server.port, 8080);
+    assert.ok(typeof data.path === "string");
+  } finally {
+    if (prev === undefined) delete process.env.MEMEX_CONFIG;
+    else process.env.MEMEX_CONFIG = prev;
     rmSync(root, { recursive: true, force: true });
   }
 });

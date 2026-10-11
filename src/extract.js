@@ -78,7 +78,7 @@ export function walkFiles(root, opts = {}) {
 /**
  * Extrae el texto de un archivo. Devuelve null si no es indexable.
  * @param {string} path
- * @returns {{text:string, extractor:string}|null}
+ * @returns {{text:string, extractor:string, buffer?:Buffer}|null}
  */
 export function extractText(path) {
   const ext = extname(path).toLowerCase();
@@ -113,7 +113,9 @@ export function extractText(path) {
 
   const text = buf.toString("utf8");
   if (text.trim().length === 0) return null;
-  return { text, extractor: "text" };
+  // Devolvemos el buffer ya leido para que el indexador calcule el hash sin
+  // volver a leer el archivo del disco.
+  return { text, extractor: "text", buffer: buf };
 }
 
 /** Heuristica sencilla: un byte NUL en el primer KB indica binario. */

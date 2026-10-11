@@ -22,6 +22,31 @@ export function openDatabase(dbPath) {
   return db;
 }
 
+/**
+ * Ejecuta `fn` dentro de una transaccion. Si `fn` lanza, se revierte todo.
+ * Se usa para que borrar+insertar un archivo sea atomico: si el indexado de
+ * un documento falla a mitad, el anterior no se pierde.
+ * @template T
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function withTransaction(db, fn) {
+  db.exec("BEGIN");
+  try {
+    const result = fn();
+    db.exec("COMMIT");
+    return result;
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      /* la transaccion ya pudo haberse cerrado por un error de SQLite */
+    }
+    throw err;
+  }
+}
+
 /** Crea el esquema si no existe y aplica migraciones aditivas. */
 export function migrate(db) {
   db.exec(`
@@ -257,6 +282,37 @@ export function chunksWithEmbeddings(db) {
 /** Numero de chunks con embedding (para decidir si hay indice semantico). */
 export function embeddedChunkCount(db) {
   return db.prepare("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NOT NULL").get().n;
+}
+
+/**
+ * Chunks pendientes de embedding (para el comando `memex embed`).
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @param {{all?:boolean}} [opts]  all=true incluye los que ya tienen vector
+ */
+export function chunksPendingEmbedding(db, opts = {}) {
+  const where = opts.all ? "" : "WHERE c.embedding IS NULL";
+  return db
+    .prepare(
+      `SELECT c.id AS chunk_id, c.content AS content, f.id AS file_id
+       FROM chunks c JOIN files f ON f.id = c.file_id
+       ${where}
+       ORDER BY c.file_id, c.chunk_index`
+    )
+    .all();
+}
+
+/** Guarda el vector de un chunk. */
+export function setChunkEmbedding(db, chunkId, embedding) {
+  db.prepare("UPDATE chunks SET embedding = ?, embed_dim = ? WHERE id = ?").run(
+    embedding,
+    embedding ? embedding.length : null,
+    chunkId
+  );
+}
+
+/** Borra todos los vectores (para recomputarlos desde cero). */
+export function clearEmbeddings(db) {
+  db.exec("UPDATE chunks SET embedding = NULL, embed_dim = NULL");
 }
 
 /** Estadisticas basicas del indice. */

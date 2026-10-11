@@ -13,13 +13,13 @@ import {
   getTrailGraph,
 } from "./db.js";
 import { cosine, fromBlob, createEmbedder } from "./embeddings.js";
-import { hybridSearch } from "./search.js";
+import { hybridSearch, resolveQueryVec } from "./search.js";
 
 /**
  * Resuelve una referencia (ruta exacta o consulta) a un file_id del indice.
  * @returns {number|null}
  */
-export function resolveFileId(db, ref, { embedder } = {}) {
+export async function resolveFileId(db, ref, { embedder } = {}) {
   if (!ref) return null;
   const asPath = getFileByPath(db, resolve(ref));
   if (asPath) return asPath.id;
@@ -27,7 +27,8 @@ export function resolveFileId(db, ref, { embedder } = {}) {
   const exact = db.prepare("SELECT id FROM files WHERE path = ?").get(ref);
   if (exact) return exact.id;
 
-  const hits = hybridSearch(db, ref, { mode: "hybrid", limit: 1, embedder });
+  const queryVec = await resolveQueryVec(embedder, ref);
+  const hits = hybridSearch(db, ref, { mode: "hybrid", limit: 1, embedder, queryVec });
   return hits.length ? hits[0].file_id : null;
 }
 
@@ -51,19 +52,19 @@ export function showTrail(db, name) {
 }
 
 /** Añade un documento (por ruta o consulta) a un trail. */
-export function addToTrail(db, { trail, ref, note, embedder }) {
+export async function addToTrail(db, { trail, ref, note, embedder }) {
   const trailId = ensureTrail(db, trail);
-  const fileId = resolveFileId(db, ref, { embedder });
+  const fileId = await resolveFileId(db, ref, { embedder });
   if (!fileId) return { ok: false, reason: "no encontrado" };
   addTrailNode(db, trailId, fileId, note ?? null);
   return { ok: true, fileId, file: getFileById(db, fileId) };
 }
 
 /** Crea una arista entre dos documentos de un trail. */
-export function linkInTrail(db, { trail, from, to, label, embedder }) {
+export async function linkInTrail(db, { trail, from, to, label, embedder }) {
   const trailId = ensureTrail(db, trail);
-  const fromId = resolveFileId(db, from, { embedder });
-  const toId = resolveFileId(db, to, { embedder });
+  const fromId = await resolveFileId(db, from, { embedder });
+  const toId = await resolveFileId(db, to, { embedder });
   if (!fromId || !toId) return { ok: false, reason: "nodo no encontrado" };
   addTrailNode(db, trailId, fromId);
   addTrailNode(db, trailId, toId);
@@ -96,8 +97,8 @@ function fileCentroids(db) {
  * Documentos mas parecidos a uno dado (por vector medio). Sugiere trails.
  * @returns {Array<{file_id,path,name,ext,score}>}
  */
-export function relate(db, ref, { limit = 10, embedder } = {}) {
-  const targetId = resolveFileId(db, ref, { embedder: embedder ?? createEmbedder({}) });
+export async function relate(db, ref, { limit = 10, embedder } = {}) {
+  const targetId = await resolveFileId(db, ref, { embedder: embedder ?? createEmbedder({}) });
   if (!targetId) return [];
   const centroids = fileCentroids(db);
   const target = centroids.get(targetId);
@@ -115,6 +116,32 @@ export function relate(db, ref, { limit = 10, embedder } = {}) {
     });
   }
   return results.sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/**
+ * Sugiere documentos afines que aun no estan en un trail (para ampliarlo).
+ * @returns {Promise<null|{trail:string, members:number, suggestions:Array}>}
+ */
+export async function suggestTrail(db, name, { limit = 10, embedder } = {}) {
+  const graph = getTrailGraph(db, name);
+  if (!graph) return null;
+  const memberIds = new Set(graph.nodes.map((n) => n.file_id));
+  const suggestions = new Map();
+
+  for (const node of graph.nodes) {
+    const related = await relate(db, node.path, { limit: limit * 3, embedder });
+    for (const r of related) {
+      if (memberIds.has(r.file_id)) continue;
+      const prev = suggestions.get(r.file_id);
+      if (!prev || r.score > prev.score) suggestions.set(r.file_id, r);
+    }
+  }
+
+  return {
+    trail: name,
+    members: graph.nodes.length,
+    suggestions: [...suggestions.values()].sort((a, b) => b.score - a.score).slice(0, limit),
+  };
 }
 
 /** Convierte un grafo de trail en JSON listo para visualizacion tipo D3. */

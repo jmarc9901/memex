@@ -17,6 +17,7 @@ import {
   relate,
   toD3,
   removeTrail,
+  suggestTrail,
 } from "../src/trails.js";
 
 function makeCorpus() {
@@ -27,7 +28,7 @@ function makeCorpus() {
   return root;
 }
 
-test("crea, lista, enlaza y exporta trails", () => {
+test("crea, lista, enlaza y exporta trails", async () => {
   const root = makeCorpus();
   const db = openDatabase(join(root, ".memex", "index.db"));
   const embedder = createEmbedder({ embed_provider: "hash", embed_dim: 256 });
@@ -37,11 +38,11 @@ test("crea, lista, enlaza y exporta trails", () => {
     const trailId = ensureTrail(db, "proyecto-x", "como llego a conclusiones");
     assert.ok(trailId > 0);
 
-    const added = addToTrail(db, { trail: "proyecto-x", ref: join(root, "proyecto.md"), embedder });
+    const added = await addToTrail(db, { trail: "proyecto-x", ref: join(root, "proyecto.md"), embedder });
     assert.ok(added.ok);
-    addToTrail(db, { trail: "proyecto-x", ref: join(root, "notas.md"), note: "contexto", embedder });
+    await addToTrail(db, { trail: "proyecto-x", ref: join(root, "notas.md"), note: "contexto", embedder });
 
-    const linked = linkInTrail(db, { trail: "proyecto-x", from: join(root, "proyecto.md"), to: join(root, "notas.md"), label: "relacionado", embedder });
+    const linked = await linkInTrail(db, { trail: "proyecto-x", from: join(root, "proyecto.md"), to: join(root, "notas.md"), label: "relacionado", embedder });
     assert.ok(linked.ok);
 
     const graph = showTrail(db, "proyecto-x");
@@ -100,13 +101,34 @@ test("exportTrail serializa a dot, mermaid, markdown y json", () => {
   assert.throws(() => exportTrail(graph, "pdf"), /formato de trail invalido/);
 });
 
-test("relate encuentra documentos afines por similitud", () => {
+test("suggestTrail propone documentos afines que aun no estan en el trail", async () => {
   const root = makeCorpus();
   const db = openDatabase(join(root, ".memex", "index.db"));
   const embedder = createEmbedder({ embed_provider: "hash", embed_dim: 256 });
   try {
     indexFolder(db, root, { embedder });
-    const results = relate(db, join(root, "proyecto.md"), { limit: 5, embedder });
+    await addToTrail(db, { trail: "t", ref: join(root, "proyecto.md"), embedder });
+
+    const res = await suggestTrail(db, "t", { limit: 5, embedder });
+    assert.equal(res.members, 1);
+    assert.ok(res.suggestions.length >= 1);
+    assert.ok(res.suggestions.every((s) => s.name !== "proyecto.md"), "no repite los miembros");
+    assert.equal(res.suggestions[0].name, "notas.md");
+
+    assert.equal(await suggestTrail(db, "inexistente", { embedder }), null);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("relate encuentra documentos afines por similitud", async () => {
+  const root = makeCorpus();
+  const db = openDatabase(join(root, ".memex", "index.db"));
+  const embedder = createEmbedder({ embed_provider: "hash", embed_dim: 256 });
+  try {
+    indexFolder(db, root, { embedder });
+    const results = await relate(db, join(root, "proyecto.md"), { limit: 5, embedder });
     assert.ok(results.length >= 1);
     assert.equal(results[0].name, "notas.md", "las notas del mismo tema deben ir primero");
   } finally {
