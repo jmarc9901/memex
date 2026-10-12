@@ -1,0 +1,19 @@
+# Refuerza en el editor lo que .gitattributes fija en git: LF en el blob, y
+# nada de mezclar tabulaciones y espacios en el mismo fichero.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+# Los README usan dos espacios al final para forzar salto de línea en algunas
+# tablas; no los eliminamos automaticamente.
+trim_trailing_whitespace = false
+
+[*.{yml,yaml}]
+indent_size = 2

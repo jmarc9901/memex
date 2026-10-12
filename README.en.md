@@ -1,5 +1,10 @@
 # Memex Offline
 
+[![CI](https://github.com/jmarc9901/memex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jmarc9901/memex/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node >= 22.13](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)](package.json)
+[![Dependencies: 0](https://img.shields.io/badge/dependencies-0-success.svg)](package.json)
+
 Your own personal search engine, **100% offline**, that indexes what you already
 have on disk: text, notes, code, PDFs, images (OCR), audio and video. Search by
 exact words (BM25) or by fuzzy text similarity, ask questions with citations to
@@ -210,6 +215,14 @@ npm run check   # dependency-free syntax check
   `Referrer-Policy: no-referrer`; static file serving is confined to `web/`.
 - No cloud, no telemetry. The only network traffic is to the RAG provider you
   configure (optional) and, once, to download the model in `memex init`.
+
+## Contributing
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — setup, what to run before a PR and the zero-dependency rule.
+- [SECURITY.md](SECURITY.md) — threat model and private vulnerability reporting.
+- [CHANGELOG.md](CHANGELOG.md) — what changed in each version.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — vision, phases and AI routes.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — code of conduct.
 
 ## License
 

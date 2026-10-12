@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # El paquete no tiene dependencias, pero el ecosistema npm se vigila igual:
+  # si alguna vez entra una, queremos el aviso desde el primer dia.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps"
+
+  # Las acciones del workflow sí son dependencias reales (y las que de verdad
+  # se desactualizan aqui).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentación
+    url: https://github.com/jmarc9901/memex#readme
+    about: Uso, comandos, configuración y limitaciones conocidas.
+  - name: Roadmap
+    url: https://github.com/jmarc9901/memex/blob/main/docs/ROADMAP.md
+    about: Qué está hecho, qué es opcional y hacia dónde va el proyecto.
+  - name: Reporte de seguridad (privado)
+    url: https://github.com/jmarc9901/memex/security/advisories/new
+    about: Para vulnerabilidades, no abras una issue pública.

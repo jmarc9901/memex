@@ -1,0 +1,50 @@
+name: Propuesta
+description: Sugerir una mejora o una funcionalidad nueva
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Recuerda la regla cero del proyecto: **sin dependencias**. Si tu idea
+        necesita un paquete npm, cuéntanos primero cómo se resolvería con lo que
+        trae Node.
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qué problema resuelve
+      description: El caso de uso real, no la solución.
+      placeholder: |
+        Cuando indexo X, no puedo hacer Y y tengo que hacerlo a mano.
+    validations:
+      required: true
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Propuesta
+      description: Cómo imaginas que funcionaría (comando, opción, salida…).
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
+      description: Qué has probado o descartado, y por qué.
+    validations:
+      required: false
+  - type: dropdown
+    id: ambito
+    attributes:
+      label: Ámbito
+      options:
+        - CLI
+        - Búsqueda y ranking
+        - Indexado y extracción (PDF, OCR, audio, ZIP…)
+        - Embeddings (hash / ONNX)
+        - RAG y proveedores
+        - GUI web
+        - Extensión de navegador
+        - Servidor MCP
+        - Documentación
+        - Otro
+    validations:
+      required: true
