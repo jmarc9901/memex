@@ -12,7 +12,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: ["22.5.0", "24"]
+        # 22.13.0 es la primera version de la linea 22 donde node:sqlite ya no
+        # exige --experimental-sqlite; con 22.5.0 los tests no podrian cargar
+        # src/db.js. Ver `engines` en package.json.
+        node: ["22.13.0", "24"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

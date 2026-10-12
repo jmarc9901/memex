@@ -2,7 +2,7 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, extname, join, normalize } from "node:path";
+import { dirname, extname, isAbsolute, join, normalize, relative } from "node:path";
 import { openDatabase, stats } from "./db.js";
 import { hybridSearch, resolveQueryVec } from "./search.js";
 import { createEmbedder, isAsyncEmbedder } from "./embeddings.js";
@@ -40,6 +40,15 @@ export function startServer(opts) {
   const indexEmbedder = isAsyncEmbedder(embedder) ? null : embedder;
   const host = opts.host ?? config.server.host ?? "127.0.0.1";
   const port = opts.port ?? config.server.port ?? 4747;
+  // La API no tiene autenticacion: si se escucha fuera de loopback, cualquiera
+  // en la red podria buscar, indexar o guardar documentos en el indice. Se
+  // exige un opt-in explicito (--allow-remote) en vez de fallar en silencio.
+  if (!isLoopbackHost(host) && !opts.allowRemote) {
+    throw new Error(
+      `host no local (${host}): el indice quedaria expuesto sin autenticacion. ` +
+        `Usa --allow-remote si confias en la red, o deja 127.0.0.1.`
+    );
+  }
   const db = openDatabase(opts.dbPath);
 
   const server = createServer(async (req, res) => {
@@ -56,6 +65,20 @@ export function startServer(opts) {
     db,
     close: () => new Promise((resolve) => server.close(() => { db.close(); resolve(); })),
   };
+}
+
+/**
+ * ¿El host es de loopback? Es la unica interfaz en la que la API se expone sin
+ * autenticacion, asi que es el valor por defecto y el unico aceptado salvo
+ * opt-in explicito.
+ * @param {string|undefined} host
+ */
+export function isLoopbackHost(host) {
+  if (typeof host !== "string" || !host) return false;
+  const h = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    h === "localhost" || h === "::1" || h === "0:0:0:0:0:0:0:1" || /^127\.\d{1,3}(\.\d{1,3}){2}$/.test(h)
+  );
 }
 
 /**
@@ -79,6 +102,8 @@ export function isAllowedOrigin(origin) {
 async function route(req, res, ctx) {
   const url = new URL(req.url, "http://localhost");
   const path = url.pathname;
+
+  res.setHeader("X-Content-Type-Options", "nosniff");
 
   if (path.startsWith("/api/")) {
     // La API se sirve desde localhost y solo debe ser consumida por la propia
@@ -105,6 +130,29 @@ async function route(req, res, ctx) {
   }
 
   return serveStatic(res, path);
+}
+
+/** Cabeceras de seguridad de la GUI (respuestas HTML/CSS/JS). */
+function setGuiHeaders(res) {
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  // La GUI no carga nada externo: solo /styles.css, /app.js y el favicon data:.
+  // 'unsafe-inline' en style-src es necesario por los atributos style="..."
+  // del HTML; no hay ningun script inline (todo va por app.js).
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data:",
+      "connect-src 'self'",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ].join("; ")
+  );
 }
 
 async function handleApi(req, res, url, { db, embedder, indexEmbedder, config }) {
@@ -240,14 +288,29 @@ function readJson(req) {
   });
 }
 
-function serveStatic(res, path) {
+/**
+ * Resuelve una ruta de la GUI dentro de `web/`, confinada a ese directorio.
+ * Se compara con `path.relative` (no con un prefijo de cadena) para que un
+ * directorio hermano tipo `web-backup` no pueda colarse.
+ * @returns {string|null} ruta absoluta dentro de web/ o null si se sale.
+ */
+export function resolveStaticPath(path) {
   const rel = path === "/" ? "index.html" : path.replace(/^\/+/, "");
   const file = normalize(join(WEB_DIR, rel));
-  if (!file.startsWith(WEB_DIR) || !existsSync(file)) {
+  const inside = relative(WEB_DIR, file);
+  if (!inside || inside.startsWith("..") || isAbsolute(inside)) return null;
+  return file;
+}
+
+function serveStatic(res, path) {
+  const file = resolveStaticPath(path);
+  if (!file || !existsSync(file)) {
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     res.end("No encontrado");
     return;
   }
+  setGuiHeaders(res);
   res.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream" });
   res.end(readFileSync(file));
 }

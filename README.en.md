@@ -12,8 +12,11 @@ generative-AI layer is **optional**: the project works completely without it.
 
 ## Requirements
 
-- **Node.js >= 22.5** (uses the built-in `node:sqlite` with FTS5). Verified on
-  Node v26.
+- **Node.js >= 22.13** (uses the built-in `node:sqlite` with FTS5). Verified on
+  Node v26. Before 22.13 (and 23.4 on the 23 line) `node:sqlite` required the
+  `--experimental-sqlite` flag, which is why the minimum is not 22.5:
+  `bin/memex.js` checks the version and fails with a clear message instead of an
+  obscure import error.
 - Optional, for extra features (skipped gracefully if missing):
   - `pdftotext` (poppler) or `mutool` (mupdf) → PDF text.
   - `tesseract` → image OCR.
@@ -67,7 +70,8 @@ never leaves the project broken. Use `--no-model` to stay on `hash`, or
 | `bench` / `stats` / `clear` | Benchmark, index stats, wipe the index. |
 
 Common options: `--db RUTA`, `--force`, `--no-embed`, `--mode hybrid|lexical|semantic`,
-`-n/--limit`, `--any`, `--json`.
+`-n/--limit`, `--any`, `--json`, and `--allow-remote` (serve) to bind outside
+localhost — refused by default because the API has no authentication.
 
 ## MCP server (for AI agents)
 
@@ -93,9 +97,10 @@ Example client config:
 
 ## Web GUI
 
-`memex serve` listens **only on localhost** and serves a dependency-free GUI
-(vanilla HTML/CSS/JS): search, ask, trails (with an SVG graph and DOT/Markdown
-export) and indexing. Same API the browser extension uses.
+`memex serve` listens on **loopback only** by default and serves a dependency-free
+GUI (vanilla HTML/CSS/JS): search, ask, trails (with an SVG graph and DOT/Markdown
+export) and indexing. Same API the browser extension uses. Binding to another
+interface (`--host 0.0.0.0`) is rejected unless you pass `--allow-remote`.
 
 ## Configuration
 
@@ -197,8 +202,12 @@ npm run check   # dependency-free syntax check
 
 ## Privacy & security
 
-- The server listens **only on localhost**; the API rejects any `Origin` that is
-  not `localhost`/`127.0.0.1` or a browser extension.
+- The server listens on **loopback only**; a non-loopback `--host` is refused at
+  startup unless `--allow-remote` is explicit. The API rejects any `Origin` that
+  is not `localhost`/`127.0.0.1` or a browser extension.
+- GUI responses carry `Content-Security-Policy` (no external resources, no inline
+  scripts), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and
+  `Referrer-Policy: no-referrer`; static file serving is confined to `web/`.
 - No cloud, no telemetry. The only network traffic is to the RAG provider you
   configure (optional) and, once, to download the model in `memex init`.
 

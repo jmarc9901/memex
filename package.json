@@ -2,6 +2,7 @@
   "name": "memex",
   "version": "0.3.0",
   "description": "Memex Offline - tu buscador personal 100% offline (full-text FTS5 + embeddings en CPU, sin LLM, sin GPU, sin dependencias)",
+  "author": "jmarc9901 <jmarc9901@users.noreply.github.com>",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -28,7 +29,7 @@
     "cli"
   ],
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "bin": {
     "memex": "./bin/memex.js"

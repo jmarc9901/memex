@@ -7,7 +7,7 @@ import { hybridSearch, resolveQueryVec } from "./search.js";
 import { createEmbedder, isAsyncEmbedder } from "./embeddings.js";
 import { configPath, loadConfig, setConfigValue } from "./config.js";
 import { ask } from "./rag.js";
-import { startServer } from "./server.js";
+import { startServer, isLoopbackHost } from "./server.js";
 import { runMcp } from "./mcp.js";
 import { runInit } from "./init.js";
 import { toolStatus, configStatus, capabilitySummary, pingRag } from "./doctor.js";
@@ -33,7 +33,7 @@ Uso:
   memex ask <pregunta> [-n N] [--json]
   memex export <consulta> [--format jsonl|csv|md] [-o ARCHIVO] [-n N] [--any] [--mode MODO]
   memex relate <ref> [-n N] [--json]
-  memex serve [--host H] [--port N] [--db RUTA]
+  memex serve [--host H] [--port N] [--allow-remote] [--db RUTA]
   memex mcp [--db RUTA]        Servidor MCP local (stdio) para agentes de IA
   memex embed [carpeta] [--force] [--json]
   memex config [show|path]
@@ -60,8 +60,12 @@ Opciones:
   --any         Une los terminos con OR en vez de AND
   --format FMT  Formato: export (jsonl|csv|md) o trail show (json|dot|mermaid|md)
   -o, --out     Archivo de salida para export (por defecto stdout)
-  --host H      Host del servidor (por defecto 127.0.0.1)
+  --host H      Host del servidor (por defecto 127.0.0.1). Fuera de loopback
+                requiere --allow-remote
   --port N      Puerto del servidor (por defecto 4747 o $MEMEX_PORT)
+  --allow-remote
+                Permite a serve escuchar fuera de localhost (la API no tiene
+                autenticacion: usalo solo en redes de confianza)
   --ping        (doctor) Comprueba si los servidores RAG locales responden
   --json        Salida en JSON
   -h, --help    Muestra esta ayuda
@@ -101,6 +105,14 @@ const VALUE_FLAGS = new Set([
   "--model", "--tokenizer", "--dim",
 ]);
 
+// Flags de tipo booleano que el parser si reconoce. Cualquier otra `--flag`
+// desconocida se registra en `flags._unknown` para avisar por stderr: antes se
+// aceptaba en silencio, asi que una errata como `--limt 5` no hacia nada.
+const BOOL_FLAGS = new Set([
+  "--force", "--no-embed", "--any", "--json", "--help", "-h",
+  "--ping", "--no-model", "--hash", "--allow-remote",
+]);
+
 /** Parser de argumentos sencillo y sin dependencias. */
 export function parseArgs(argv) {
   const flags = { _: [] };
@@ -131,11 +143,14 @@ export function parseArgs(argv) {
       case "--no-embed": flags.noEmbed = true; break;
       case "--any": flags.any = true; break;
       case "--json": flags.json = true; break;
+      case "--allow-remote": flags.allowRemote = true; break;
       case "-h":
       case "--help": flags.help = true; break;
       default:
-        if (arg.startsWith("--") && !VALUE_FLAGS.has(arg)) flags[arg.slice(2)] = true;
-        else flags._.push(arg);
+        if (arg.startsWith("--") && !VALUE_FLAGS.has(arg)) {
+          flags[arg.slice(2)] = true;
+          if (!BOOL_FLAGS.has(arg)) (flags._unknown ??= []).push(arg);
+        } else flags._.push(arg);
     }
   }
   return flags;
@@ -154,6 +169,15 @@ export async function run(argv, io = {}) {
   const color = makeColor((out.isTTY ?? false) && !process.env.NO_COLOR);
   const flags = parseArgs(argv);
   const command = flags._[0];
+
+  // Las opciones no reconocidas se avisan por stderr (nunca por stdout: la
+  // salida puede ser JSON que otro proceso este parseando).
+  if (flags._unknown?.length) {
+    const err = io.stderr ?? process.stderr;
+    err.write(
+      `! opciones no reconocidas: ${flags._unknown.join(", ")} (se ignoran)\n`
+    );
+  }
 
   if (!command || flags.help) {
     out.write(HELP + "\n");
@@ -403,9 +427,16 @@ function cmdServe({ out, color, flags, dbPath }) {
     dbPath,
     host,
     port,
+    allowRemote: Boolean(flags.allowRemote),
     onListen: ({ host: h, port: p }) => {
       out.write(`${color.green("✓")} Memex escuchando en ${color.bold(`http://${h}:${p}`)}\n`);
       out.write(`  ${color.dim(`indice: ${dbPath}`)}\n`);
+      if (!isLoopbackHost(h)) {
+        out.write(
+          `  ${color.yellow("!")} ${color.yellow("expuesto fuera de localhost")} ` +
+            `${color.dim("sin autenticacion: limitalo a una red de confianza")}\n`
+        );
+      }
       out.write(`  ${color.dim("Ctrl+C para detener")}\n`);
     },
   });

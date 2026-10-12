@@ -46,6 +46,33 @@ test("parseArgs exige valor para flags que lo requieren", () => {
   assert.throws(() => parseArgs(["search", "x", "--mode"]), /falta el valor/);
 });
 
+test("parseArgs registra las flags desconocidas sin romper las propias", () => {
+  const flags = parseArgs(["init", "--no-model", "--limt", "5"]);
+  assert.equal(flags["no-model"], true, "--no-model sigue siendo una flag valida");
+  assert.deepEqual(flags._unknown, ["--limt"]);
+
+  const clean = parseArgs(["search", "x", "--json", "--any"]);
+  assert.equal(clean._unknown, undefined, "sin erratas no hay avisos");
+});
+
+test("run() avisa por stderr (nunca por stdout) de las opciones desconocidas", async () => {
+  const root = mkdtempSync(join(tmpdir(), "memex-flags-"));
+  try {
+    const stdout = collector();
+    const stderr = collector();
+    await run(["stats", "--db", join(root, "index.db"), "--json", "--limt"], {
+      stdout,
+      stderr,
+    });
+    assert.match(stderr.text, /no reconocidas/);
+    assert.match(stderr.text, /--limt/);
+    // stdout queda limpio: sigue siendo JSON parseable por otro proceso.
+    assert.equal(JSON.parse(stdout.text).files, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("formatExport serializa a jsonl, csv y markdown", () => {
   const rows = [
     { name: "a.md", path: "/a.md", ext: ".md", chunk_index: 0, score: -1.5, snippet: "hola [[ansiedad]]" },

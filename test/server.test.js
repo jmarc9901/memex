@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { openDatabase } from "../src/db.js";
 import { indexFolder } from "../src/indexer.js";
 import { createEmbedder } from "../src/embeddings.js";
-import { startServer } from "../src/server.js";
+import { startServer, isLoopbackHost, resolveStaticPath } from "../src/server.js";
 
 /** Arranca el servidor en un puerto libre con un corpus de prueba. */
 async function withServer(fn) {
@@ -170,6 +170,71 @@ test("la API rechaza origenes remotos y permite extensiones y localhost", async 
       headers: { origin: "https://evil.example" },
     });
     assert.equal(preflight.status, 403);
+  });
+});
+
+test("isLoopbackHost acepta loopback y rechaza el resto", () => {
+  for (const host of ["127.0.0.1", "localhost", "::1", "[::1]", "127.0.0.53"]) {
+    assert.equal(isLoopbackHost(host), true, `${host} deberia ser loopback`);
+  }
+  for (const host of ["0.0.0.0", "192.168.1.10", "::", "example.com", "", undefined]) {
+    assert.equal(isLoopbackHost(host), false, `${host} no deberia ser loopback`);
+  }
+});
+
+test("serve rechaza escuchar fuera de loopback sin --allow-remote", () => {
+  const root = mkdtempSync(join(tmpdir(), "memex-host-"));
+  try {
+    const dbPath = join(root, "index.db");
+    for (const host of ["0.0.0.0", "192.168.1.10"]) {
+      assert.throws(() => startServer({ dbPath, port: 0, host }), /no local/, `${host} deberia rechazarse`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("serve arranca fuera de loopback solo con allowRemote explicito", async () => {
+  const root = mkdtempSync(join(tmpdir(), "memex-remote-"));
+  const handle = startServer({
+    dbPath: join(root, "index.db"),
+    port: 0,
+    host: "0.0.0.0",
+    allowRemote: true,
+  });
+  try {
+    if (!handle.server.listening) {
+      await new Promise((resolve) => handle.server.once("listening", resolve));
+    }
+    assert.ok(handle.server.listening);
+  } finally {
+    await handle.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("resolveStaticPath confina las rutas a web/", () => {
+  assert.match(resolveStaticPath("/"), /web[/\\]index\.html$/);
+  assert.match(resolveStaticPath("/app.js"), /web[/\\]app\.js$/);
+  for (const path of ["/../src/db.js", "/../package.json", "/../", "/..\\..\\package.json"]) {
+    assert.equal(resolveStaticPath(path), null, `${path} deberia quedar fuera de web/`);
+  }
+});
+
+test("la GUI lleva cabeceras de seguridad y no sirve nada fuera de web/", async () => {
+  await withServer(async (base) => {
+    const html = await fetch(`${base}/`);
+    assert.equal(html.status, 200);
+    assert.equal(html.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(html.headers.get("x-frame-options"), "DENY");
+    assert.match(html.headers.get("content-security-policy"), /default-src 'self'/);
+    assert.match(html.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+
+    // Ni rutas codificadas ni directorios hermanos (web-algo) se sirven.
+    for (const path of ["/..%2fpackage.json", "/%2e%2e/package.json", "/web-backup/x.js"]) {
+      const res = await fetch(`${base}${path}`);
+      assert.equal(res.status, 404, `${path} no deberia servirse`);
+    }
   });
 });
 

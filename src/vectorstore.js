@@ -94,6 +94,21 @@ function popcount(x) {
   return (x * 0x01010101) >> 24;
 }
 
+const dimWarnings = new Set();
+
+/** Avisa una sola vez por cada par (dim del indice, dim de la consulta). */
+function warnDimMismatch(storeDim, queryDim) {
+  const key = `${storeDim}:${queryDim}`;
+  if (dimWarnings.has(key)) return;
+  dimWarnings.add(key);
+  process.emitWarning(
+    `el vector de consulta tiene ${queryDim} dimensiones y el indice ${storeDim}: ` +
+      "se omiten los resultados semanticos. Tras cambiar de proveedor de embeddings " +
+      'recalcula los vectores con "memex embed --force".',
+    { code: "MEMEX_EMBED_DIM_MISMATCH" }
+  );
+}
+
 /** Firma binaria de un vector de consulta (misma convencion que el store). */
 function queryBits(vec, dim, words) {
   const bits = new Uint32Array(words);
@@ -116,7 +131,16 @@ export function semanticSearch(db, queryVec, opts = {}) {
   const store = getStore(db);
   if (!store || !queryVec) return [];
 
-  const dim = Math.min(queryVec.length, store.dim);
+  // Comparar vectores de distinta dimension no significa nada: pasaria con un
+  // cambio de proveedor (hash 256 <-> onnx 384) sin recomputar los embeddings.
+  // Antes se truncaba en silencio y devolvia puntuaciones casi nulas; ahora se
+  // avisa una vez y se descartan los resultados semanticos.
+  if (queryVec.length !== store.dim) {
+    warnDimMismatch(store.dim, queryVec.length);
+    return [];
+  }
+
+  const dim = store.dim;
   const scored = [];
 
   if (store.count <= EXACT_LIMIT && !opts.approx) {

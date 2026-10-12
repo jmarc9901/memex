@@ -13,8 +13,10 @@ de IA generativa es **opcional**: el proyecto funciona por completo sin ella.
 
 ## Requisitos
 
-- **Node.js >= 22.5** (usa el módulo integrado `node:sqlite` con FTS5).
-  Verificado con Node v26.
+- **Node.js >= 22.13** (usa el módulo integrado `node:sqlite` con FTS5).
+  Verificado con Node v26. Hasta 22.13 (y 23.4 en la línea 23) `node:sqlite`
+  exigía el flag `--experimental-sqlite`, por eso el mínimo no es 22.5: `bin/memex.js`
+  comprueba la versión y avisa con un mensaje claro en lugar de fallar al importar.
 - Opcional, para funciones extra (si no están, se omiten sin fallar):
   - `pdftotext` (poppler) o `mutool` (mupdf) → texto de PDFs.
   - `tesseract` → OCR de imágenes.
@@ -88,7 +90,8 @@ node bin/memex.js serve        # http://127.0.0.1:4747
 | `--any` | Une los términos con OR. |
 | `--format` | Formato de `export`: `jsonl`, `csv` o `md`. |
 | `-o`, `--out` | Archivo de salida de `export`. |
-| `--host`, `--port` | Host y puerto de `serve`. |
+| `--host`, `--port` | Host y puerto de `serve`. Cambiar `--host` fuera de loopback exige `--allow-remote`. |
+| `--allow-remote` | (`serve`) Permite escuchar fuera de `localhost`. La API **no tiene autenticación**: úsalo solo en redes de confianza. |
 | `--ping` | (`doctor`) Comprueba si los servidores RAG locales responden. |
 | `--json` | Salida en JSON (para scripts). |
 
@@ -108,8 +111,10 @@ node bin/memex.js serve --port 8080
 
 ## Interfaz gráfica web
 
-`memex serve` levanta un servidor que escucha **solo en localhost** y sirve una
-GUI sin dependencias (HTML/CSS/JS vanilla) en `http://127.0.0.1:4747`:
+`memex serve` levanta un servidor que escucha **solo en loopback** por defecto y
+sirve una GUI sin dependencias (HTML/CSS/JS vanilla) en `http://127.0.0.1:4747`.
+Escuchar en otra interfaz (`--host 0.0.0.0`) se rechaza salvo que pases
+`--allow-remote`, porque la API no tiene autenticación:
 
 - **Buscar**: pestañas de modo, resaltado de coincidencias, OR opcional.
 - **Preguntar**: respuesta RAG con lista de fuentes citadas.
@@ -334,7 +339,13 @@ La visión completa (fases, rutas de IA y proveedores gratuitos) está en
 
 ## Privacidad y seguridad
 
-- El servidor escucha **solo en localhost** y sirve la GUI desde ahí.
+- El servidor escucha **solo en loopback** y sirve la GUI desde ahí. Un `--host`
+  no local sin `--allow-remote` se rechaza al arrancar, para que el índice no
+  quede expuesto por descuido (la API no tiene autenticación).
+- Las respuestas de la GUI llevan `Content-Security-Policy` (sin recursos
+  externos ni scripts inline), `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY` y `Referrer-Policy: no-referrer`; el servidor de
+  ficheros está confinado a `web/`.
 - La API rechaza peticiones con un `Origin` que no sea de `localhost`/`127.0.0.1`
   ni de una extensión de navegador, de modo que una web que visites no puede
   leer ni escribir en tu índice. Las extensiones solo hablan con

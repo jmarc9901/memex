@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { openDatabase, insertFile } from "../src/db.js";
+import { openDatabase, insertFile, withTransaction } from "../src/db.js";
 import { getStore, semanticSearch, resetStore } from "../src/vectorstore.js";
 import { hashEmbed } from "../src/embeddings.js";
 
@@ -19,14 +19,18 @@ function makeDb(n) {
     const content = `documento numero ${i} sobre tema ${i * 7} y contenido variado ${i % 13}`;
     chunks.push({ content, embedding: hashEmbed(content, { dim: DIM }) });
   }
-  insertFile(db, {
-    path: join(root, "corpus.txt"),
-    name: "corpus.txt",
-    ext: ".txt",
-    size: 1,
-    mtime: 1,
-    chunks,
-  });
+  // Una sola transaccion: sin ella, cada chunk se confirma por separado y
+  // insertar 2000 fragmentos pasaba de ~0,2 s a mas de 90 s (fsync por fila).
+  withTransaction(db, () =>
+    insertFile(db, {
+      path: join(root, "corpus.txt"),
+      name: "corpus.txt",
+      ext: ".txt",
+      size: 1,
+      mtime: 1,
+      chunks,
+    })
+  );
   return { root, db };
 }
 
@@ -66,6 +70,27 @@ test("el escaneo exacto encuentra el documento identico", () => {
     assert.equal(hits[0].index, 30);
     assert.ok(hits[0].score > 0.99, "un vector identico da coseno ~1");
   } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("semanticSearch descarta consultas con otra dimension y avisa", async () => {
+  const { root, db } = makeDb(5);
+  const warnings = [];
+  const onWarning = (w) => warnings.push(w);
+  process.on("warning", onWarning);
+  try {
+    // 32 dimensiones contra un indice de 64: no son comparables.
+    const hits = semanticSearch(db, new Float32Array(32), { k: 3, minScore: 0 });
+    assert.deepEqual(hits, [], "no debe devolver resultados con dimensiones mezcladas");
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(
+      warnings.some((w) => w.code === "MEMEX_EMBED_DIM_MISMATCH"),
+      "deberia avisar del desajuste de dimensiones"
+    );
+  } finally {
+    process.removeListener("warning", onWarning);
     db.close();
     rmSync(root, { recursive: true, force: true });
   }
