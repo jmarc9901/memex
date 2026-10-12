@@ -1,5 +1,10 @@
 # Memex Offline
 
+[![CI](https://github.com/jmarc9901/memex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jmarc9901/memex/actions/workflows/ci.yml)
+[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
+[![Node >= 22.13](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)](package.json)
+[![Dependencias: 0](https://img.shields.io/badge/dependencias-0-success.svg)](package.json)
+
 > English: [README.en.md](README.en.md)
 
 Tu propio buscador personal, **100% offline**, que indexa lo que tienes en el
@@ -352,6 +357,14 @@ La visión completa (fases, rutas de IA y proveedores gratuitos) está en
   `127.0.0.1`/`localhost`.
 - Sin nube y sin telemetría: toda la recuperación ocurre en tu máquina. El
   único tráfico de red es hacia el proveedor RAG que configures (opcional).
+
+## Contribuir
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — cómo montar el proyecto, qué se ejecuta antes de un PR y la regla cero (**sin dependencias**).
+- [SECURITY.md](SECURITY.md) — modelo de amenazas y reporte privado de vulnerabilidades.
+- [CHANGELOG.md](CHANGELOG.md) — qué cambió en cada versión.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — visión, fases y rutas de IA.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — código de conducta.
 
 ## Licencia
 

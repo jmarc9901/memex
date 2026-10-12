@@ -1,0 +1,60 @@
+name: Error
+description: Algo no funciona como debería
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por tomarte el tiempo. Antes de seguir: si es un problema de
+        **seguridad**, no lo publiques aquí — mira [SECURITY.md](https://github.com/jmarc9901/memex/blob/main/SECURITY.md).
+  - type: textarea
+    id: que-pasa
+    attributes:
+      label: Qué ocurre
+      description: Describe el comportamiento observado y el esperado.
+      placeholder: |
+        Esperaba que `memex search` devolviera X y devuelve Y.
+    validations:
+      required: true
+  - type: textarea
+    id: reproducir
+    attributes:
+      label: Cómo reproducirlo
+      description: Comandos exactos y lo mínimo necesario para repetirlo.
+      placeholder: |
+        1. node bin/memex.js index /ruta
+        2. node bin/memex.js search "consulta"
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: salida
+    attributes:
+      label: Salida y traza de error
+      description: Copia el resultado tal cual. Añade `--json` si ayuda.
+      render: text
+    validations:
+      required: false
+  - type: input
+    id: node
+    attributes:
+      label: Versión de Node
+      description: "Salida de `node --version` (mínimo soportado: 22.13)."
+      placeholder: v22.13.0
+    validations:
+      required: true
+  - type: input
+    id: so
+    attributes:
+      label: Sistema operativo
+      placeholder: Windows 11 / Ubuntu 24.04 / macOS 15
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Salida de `memex doctor`
+      description: Informa de las herramientas opcionales y de la configuración efectiva.
+      render: text
+    validations:
+      required: false
