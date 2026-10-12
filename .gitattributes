@@ -1,0 +1,9 @@
+# Politica de finales de linea del repositorio.
+#
+# Sin este fichero el comportamiento dependia del `core.autocrlf` de cada
+# maquina: en Windows git avisaba de "LF will be replaced by CRLF" en cada
+# edicion y en Linux/macOS se trabajaba en LF. La CI corre en los 3 SO, asi que
+# se fija aqui: git guarda los blobs normalizados (LF) y hace checkout nativo
+# (CRLF en Windows, LF en Linux/macOS). Git detecta los binarios por su
+# contenido, de modo que `text=auto` no los corrompe.
+* text=auto

@@ -3,3 +3,11 @@ node_modules/
 *.db
 *.db-wal
 *.db-shm
+
+# Artefactos de empaquetado y de herramientas
+*.tgz
+npm-debug.log*
+coverage/
+
+# Claves de la capa RAG opcional (MEMEX_RAG_API_KEY, rag.api_key)
+.env
