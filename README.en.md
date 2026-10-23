@@ -331,8 +331,8 @@ Module details, data model and invariants: [docs/ARQUITECTURA.md](docs/ARQUITECT
 
 ```bash
 npm run check      # syntax of every .js (no dependencies)
-npm test           # 144 tests with node --test
-npm run coverage   # built-in node --test coverage
+npm test           # 149 tests with node --test
+npm run coverage   # coverage with thresholds that fail CI
 npm run bench      # indexing and search benchmark
 ```
 

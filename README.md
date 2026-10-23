@@ -332,8 +332,8 @@ Detalle de módulos, modelo de datos e invariantes: [docs/ARQUITECTURA.md](docs/
 
 ```bash
 npm run check      # sintaxis de todos los .js (sin dependencias)
-npm test           # 144 pruebas con node --test
-npm run coverage   # cobertura integrada de node --test
+npm test           # 149 pruebas con node --test
+npm run coverage   # cobertura con umbrales que hacen fallar el CI
 npm run bench      # benchmark de indexado y búsqueda
 ```
 

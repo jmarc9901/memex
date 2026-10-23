@@ -38,8 +38,10 @@ de [`docs/ROADMAP.md`](docs/ROADMAP.md), no de notas de release. Además, la
   atajo `/` para buscar.
 - **Helpers puros de la UI** en `web/lib.js`, con tests en Node (sin navegador).
 - **Tests de la extensión** con la API de Chrome simulada y **tests de la poda,
-  del batching, del tokenizer cased y de la caché entre conexiones**. La suite
-  pasa de 118 a 144 pruebas.
+  del batching, del tokenizer cased y de la caché entre conexiones**, además de
+  los comandos de trail/relate/embed/doctor/clear y los endpoints de trails y
+  embed. La suite pasa de 118 a 149 pruebas y la cobertura se ejecuta con
+  umbrales (82 % líneas, 72 % ramas, 84 % funciones) que rompen el CI si bajan.
 - **Iconos de la extensión** generados por código (`scripts/make-icons.js`, sin
   dependencias) y declarados en el manifest.
 - **Documentación nueva**: [docs/API.md](docs/API.md),

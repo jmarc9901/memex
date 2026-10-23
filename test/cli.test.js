@@ -200,6 +200,123 @@ test("run() acota -n al maximo de resultados de la API", async () => {
   }
 });
 
+/** Aisla la config del usuario para que estos tests sean deterministas. */
+function isolateConfig(root) {
+  const prev = process.env.MEMEX_CONFIG;
+  process.env.MEMEX_CONFIG = join(root, "config.json");
+  return () => {
+    if (prev === undefined) delete process.env.MEMEX_CONFIG;
+    else process.env.MEMEX_CONFIG = prev;
+  };
+}
+
+test("run() crea, enlaza, muestra, sugiere y elimina un trail", async () => {
+  const root = makeCorpus();
+  const restore = isolateConfig(root);
+  try {
+    const dbPath = join(root, ".memex", "index.db");
+    await run(["index", root, "--db", dbPath, "--no-embed"], { stdout: collector() });
+    const note = join(root, "diario.md");
+    const recipe = join(root, "receta.txt");
+
+    await run(["trail", "create", "demo", "--desc", "camino", "--db", dbPath], {
+      stdout: collector(),
+    });
+    await run(["trail", "add", "demo", note, "--note", "inicio", "--db", dbPath], {
+      stdout: collector(),
+    });
+    const link = collector();
+    await run(
+      ["trail", "link", "demo", note, recipe, "--label", "relacionado", "--db", dbPath],
+      { stdout: link }
+    );
+    assert.match(link.text, /Enlace creado/);
+
+    const show = collector();
+    await run(["trail", "show", "demo", "--json", "--db", dbPath], { stdout: show });
+    const graph = JSON.parse(show.text);
+    assert.equal(graph.trail, "demo");
+    assert.equal(graph.nodes.length, 2);
+    assert.equal(graph.links.length, 1);
+
+    const dot = collector();
+    await run(["trail", "show", "demo", "--format", "dot", "--db", dbPath], { stdout: dot });
+    assert.match(dot.text, /^digraph/);
+
+    const list = collector();
+    await run(["trails", "--json", "--db", dbPath], { stdout: list });
+    assert.equal(JSON.parse(list.text)[0].name, "demo");
+
+    const suggest = collector();
+    await run(["trail", "suggest", "demo", "--json", "--db", dbPath], { stdout: suggest });
+    assert.ok(Array.isArray(JSON.parse(suggest.text).suggestions));
+
+    const rm = collector();
+    await run(["trail", "rm", "demo", "--db", dbPath], { stdout: rm });
+    assert.match(rm.text, /eliminado/);
+  } finally {
+    restore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run() relaciona documentos y calcula embeddings pendientes", async () => {
+  const root = makeCorpus();
+  const restore = isolateConfig(root);
+  try {
+    const dbPath = join(root, ".memex", "index.db");
+    const embed = collector();
+    await run(["embed", root, "--db", dbPath, "--json"], { stdout: embed });
+    const embedded = JSON.parse(embed.text);
+    assert.equal(embedded.provider, "hash");
+    assert.ok(embedded.embedded >= 2, "debe vectorizar los fragmentos pendientes");
+
+    const relate = collector();
+    await run(["relate", join(root, "diario.md"), "--db", dbPath, "--json"], {
+      stdout: relate,
+    });
+    const results = JSON.parse(relate.text).results;
+    assert.ok(Array.isArray(results) && results.length >= 1);
+
+    const doctor = collector();
+    await run(["doctor", "--json"], { stdout: doctor });
+    const status = JSON.parse(doctor.text);
+    assert.ok(Array.isArray(status.tools) && status.tools.length >= 5);
+    assert.equal(typeof status.capabilities.pdf, "boolean");
+
+    const clear = collector();
+    await run(["clear", "--db", dbPath], { stdout: clear });
+    assert.match(clear.text, /vaciado/);
+
+    const stats = collector();
+    await run(["stats", "--db", dbPath, "--json"], { stdout: stats });
+    assert.equal(JSON.parse(stats.text).files, 0);
+  } finally {
+    restore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run() valida argumentos de trail, relate, config e init", async () => {
+  const root = makeCorpus();
+  const restore = isolateConfig(root);
+  try {
+    const out = { stdout: collector() };
+    await assert.rejects(() => run(["trail", "volar"], out), /subcomando desconocido/);
+    await assert.rejects(() => run(["trail", "add", "x"], out), /al menos una ruta/);
+    await assert.rejects(() => run(["trail", "link", "x", "solo-una"], out), /uso: memex trail link/);
+    await assert.rejects(() => run(["relate"], out), /uso: memex relate/);
+    await assert.rejects(() => run(["config", "set", "rag.provider"], out), /uso: memex config set/);
+    await assert.rejects(
+      () => run(["init", root, "--dim", "0", "--no-model"], out),
+      /--dim invalido/
+    );
+  } finally {
+    restore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("run() informa de la poda al reindexar", async () => {
   const root = makeCorpus();
   try {

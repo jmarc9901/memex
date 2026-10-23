@@ -174,6 +174,45 @@ test("sirve la GUI estatica y rechaza rutas desconocidas", async () => {
   });
 });
 
+test("POST /api/embed responde con el resumen de texto y de vectores", async () => {
+  await withServer(async (base, root) => {
+    const res = await fetch(`${base}/api/embed`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: root }),
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.provider, "hash");
+    assert.equal(data.text.unchanged, 1);
+    assert.equal(data.embedded, 0, "el corpus de prueba ya venia vectorizado");
+  });
+});
+
+test("GET /api/trails/:name?format=dot y /api/config", async () => {
+  await withServer(async (base, root) => {
+    await fetch(`${base}/api/trails/formato`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ref: join(root, "notas.md") }),
+    });
+
+    const dot = await fetch(`${base}/api/trails/formato?format=dot`);
+    assert.equal(dot.status, 200);
+    assert.match(dot.headers.get("content-type"), /graphviz/);
+    assert.match(await dot.text(), /^digraph/);
+
+    const bad = await fetch(`${base}/api/trails/formato?format=pdf`);
+    assert.equal(bad.status, 400);
+
+    const cfg = await fetch(`${base}/api/config`);
+    assert.equal(cfg.status, 200);
+    const config = await cfg.json();
+    assert.equal(config.embed_provider, "hash");
+    assert.equal(typeof config.rag_enabled, "boolean");
+  });
+});
+
 test("GET /api/tools informa herramientas y configuracion", async () => {
   await withServer(async (base) => {
     const res = await fetch(`${base}/api/tools`);
