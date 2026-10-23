@@ -39,8 +39,8 @@ body:
     id: node
     attributes:
       label: Versión de Node
-      description: "Salida de `node --version` (mínimo soportado: 22.13)."
-      placeholder: v22.13.0
+      description: "Salida de `node --version` (mínimo soportado: 24.0; necesita FTS5)."
+      placeholder: v24.0.0
     validations:
       required: true
   - type: input

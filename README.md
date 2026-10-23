@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/jmarc9901/memex/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jmarc9901/memex/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="LICENSE"><img alt="Licencia: MIT" src="https://img.shields.io/badge/licencia-MIT-blue.svg"></a>
-  <a href="package.json"><img alt="Node >= 22.13" src="https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg"></a>
+  <a href="package.json"><img alt="Node >= 24" src="https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg"></a>
   <a href="package.json"><img alt="Dependencias: 0" src="https://img.shields.io/badge/dependencias-0-success.svg"></a>
   <img alt="Local-first" src="https://img.shields.io/badge/local--first-100%25%20offline-4cc38a">
   <a href="docs/API.md"><img alt="MCP" src="https://img.shields.io/badge/MCP-stdio-6cb6ff"></a>
@@ -64,8 +64,9 @@ hizo ubicuo, pero fragmentado y opaco; esto es la versión local y tuya.
 
 ## Instalación
 
-Requisito único: **Node.js >= 22.13** (usa `node:sqlite` con FTS5; verificado con
-Node 26). No hay dependencias que instalar.
+Requisito único: **Node.js >= 24** (usa `node:sqlite` con FTS5; verificado con
+Node 26). Node 22.13 **no** sirve: su SQLite no compila FTS5 y el índice falla con
+`no such module: fts5`. No hay dependencias que instalar.
 
 ```bash
 git clone https://github.com/jmarc9901/memex.git
@@ -343,9 +344,9 @@ MCP, los instaladores, la extensión y los helpers de la GUI. `test/quality.test
 mide **precision@1 / recall@3** sobre un corpus etiquetado: es la red que detecta
 regresiones de ranking, no solo que la búsqueda devuelva algo.
 
-CI: matriz Linux/Windows/macOS × Node 22.13/24/26, `npm ci`, `check`, `test` y
-cobertura en Linux/26. Sin dependencias: los únicos "paquetes" son las acciones
-del workflow.
+CI: matriz Linux/Windows/macOS × Node 24/26, `npm ci`, `check`, `test`, cobertura
+en Linux/26 y verificación del paquete (assets, docs, iconos y versión alineada).
+Sin dependencias: los únicos "paquetes" son las acciones del workflow.
 
 ```bash
 node bin/memex.js bench ~/Documentos          # archivos/s, latencia y RSS

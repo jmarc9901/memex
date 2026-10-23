@@ -23,10 +23,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        # 22.13.0 es la primera version de la linea 22 donde node:sqlite ya no
-        # exige --experimental-sqlite; con 22.5.0 los tests no podrian cargar
-        # src/db.js. Ver `engines` en package.json.
-        node: ["22.13.0", "24", "26"]
+        # Node 24 es el minimo real: el SQLite de Node 22.13 no compila FTS5 y
+        # falla con "no such module: fts5". Ver `engines` en package.json.
+        node: ["24", "26"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

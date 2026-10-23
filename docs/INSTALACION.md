@@ -6,9 +6,9 @@ biblioteca estandar.
 
 ## Requisitos
 
-- **Node.js >= 22.13** (probado con Node 26). Antes de 22.13 `node:sqlite`
-  requeria `--experimental-sqlite`; `bin/memex.js` comprueba la version y da un
-  error claro.
+- **Node.js >= 24** (probado con Node 26). El SQLite integrado de Node 22.13 no
+  compila FTS5 y el indice falla con `no such module: fts5`; por eso el minimo es
+  24. `bin/memex.js` comprueba la version y da un error claro.
 - Opcional, solo para funciones extra:
   - `pdftotext` (poppler) o `mutool` (mupdf) para PDFs.
   - `tesseract` para OCR de imagenes.
@@ -155,8 +155,9 @@ fragmentos.
 
 ## Problemas frecuentes
 
-**`node:sqlite` no existe o pide un flag.** Estás en Node < 22.13. Actualiza a
-una version reciente (`node -v`).
+**`node:sqlite` no existe o `no such module: fts5`.** Estás en Node < 24. El
+SQLite de Node 22.13 no incluye FTS5. Actualiza a una version reciente
+(`node -v`).
 
 **El comando `memex` no aparece.** `npm link` no modifico el `PATH`. Ejecuta
 `node bin/memex.js` o revisa la carpeta global de npm (`npm bin -g`).

@@ -12,7 +12,9 @@ import { dirname, join, resolve } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
-const MIN_NODE = { major: 22, minor: 13 };
+// node:sqlite incluye FTS5 desde Node 24; antes, crear el indice falla con
+// "no such module: fts5".
+const MIN_NODE = { major: 24, minor: 0 };
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith("-")));
@@ -61,6 +63,7 @@ function main() {
     process.stderr.write(
       `${bad("✗")} Se requiere Node >= ${MIN_NODE.major}.${MIN_NODE.minor}.0 ` +
         `(tienes v${process.versions.node}).\n` +
+        `  Hace falta FTS5 en node:sqlite, disponible desde Node 24.\n` +
         `  Instala una version reciente desde https://nodejs.org y vuelve a intentarlo.\n`
     );
     process.exit(1);

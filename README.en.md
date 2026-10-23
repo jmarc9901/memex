@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/jmarc9901/memex/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jmarc9901/memex/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-  <a href="package.json"><img alt="Node >= 22.13" src="https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg"></a>
+  <a href="package.json"><img alt="Node >= 24" src="https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg"></a>
   <a href="package.json"><img alt="Dependencies: 0" src="https://img.shields.io/badge/dependencies-0-success.svg"></a>
   <img alt="Local-first" src="https://img.shields.io/badge/local--first-100%25%20offline-4cc38a">
   <a href="docs/API.md"><img alt="MCP" src="https://img.shields.io/badge/MCP-stdio-6cb6ff"></a>
@@ -64,8 +64,9 @@ fragmented and opaque; this is the local, owned version.
 
 ## Install
 
-One requirement: **Node.js >= 22.13** (uses `node:sqlite` with FTS5; verified on
-Node 26). There are no dependencies to install.
+One requirement: **Node.js >= 24** (uses `node:sqlite` with FTS5; verified on
+Node 26). Node 22.13 **does not work**: its SQLite is built without FTS5 and the
+index fails with `no such module: fts5`. There are no dependencies to install.
 
 ```bash
 git clone https://github.com/jmarc9901/memex.git
@@ -342,9 +343,9 @@ installers, the browser extension and the GUI helpers. `test/quality.test.js`
 measures **precision@1 / recall@3** on a labelled corpus: it catches ranking
 regressions, not just "search returned something".
 
-CI: Linux/Windows/macOS × Node 22.13/24/26 matrix, `npm ci`, `check`, `test`, and
-coverage on Linux/26. No dependencies: the only "packages" are the workflow
-actions.
+CI: Linux/Windows/macOS × Node 24/26 matrix, `npm ci`, `check`, `test`, coverage
+on Linux/26 and a package check (assets, docs, icons and aligned versions). No
+dependencies: the only "packages" are the workflow actions.
 
 ```bash
 node bin/memex.js bench ~/Documents          # files/s, latency and RSS

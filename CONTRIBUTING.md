@@ -16,7 +16,7 @@ imprescindible. Fuera de eso, un PR que añada dependencias se cierra.
 
 ## Requisitos
 
-- **Node >= 22.13** (por `node:sqlite`; ver `engines` en `package.json`).
+- **Node >= 24** (por `node:sqlite` con FTS5; ver `engines` en `package.json`).
 - Opcional, para las funciones que dependen de binarios externos: `pdftotext` o
   `mutool`, `tesseract`, `whisper-cli`/`whisper` y `ffmpeg`. Si faltan, esa parte
   se omite y el resto funciona.

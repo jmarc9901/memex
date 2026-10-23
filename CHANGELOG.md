@@ -48,6 +48,11 @@ de [`docs/ROADMAP.md`](docs/ROADMAP.md), no de notas de release. Además, la
 
 ### Cambiado
 
+- **Mínimo de Node: 24.0** (antes 22.13). El SQLite que trae Node 22.13 no compila
+  FTS5 y el índice fallaba con `no such module: fts5`; la matriz de CI lo detectó
+  en las tres plataformas. Node 24 es la primera línea con FTS5 en `node:sqlite`.
+  La guardia de `bin/memex.js`, `engines`, los instaladores y la matriz de CI
+  (24/26) se alinean con ese mínimo.
 - **`memex init` reutiliza el modelo ya descargado**: antes volvía a bajar 23 MB
   (o 180 MB) en cada ejecución.
 - `POST /api/index` y `POST /api/embed` validan `path` y responden **400** si no
