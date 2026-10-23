@@ -1,5 +1,5 @@
 // Memex Offline - extraccion de texto y chunking. Todo local, sin red.
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { IMAGE_EXTENSIONS, ocrImage } from "./ocr.js";
@@ -44,6 +44,9 @@ const CHUNK_OVERLAP = 200;
 
 /**
  * Recorre una carpeta y devuelve los archivos soportados.
+ * Valida la raiz: una ruta inexistente o un archivo suelto son errores de uso,
+ * no una carpeta vacia (antes se respondia "0 archivos, 0 errores" y parecia
+ * que el indexado habia funcionado).
  * @param {string} root
  * @param {{ignore?:Set<string>}} [opts]
  * @returns {string[]} rutas absolutas
@@ -51,6 +54,13 @@ const CHUNK_OVERLAP = 200;
 export function walkFiles(root, opts = {}) {
   const ignore = opts.ignore ?? DEFAULT_IGNORES;
   const base = resolve(root);
+  let info;
+  try {
+    info = statSync(base);
+  } catch {
+    throw new Error(`no existe la carpeta: ${base}`);
+  }
+  if (!info.isDirectory()) throw new Error(`no es una carpeta: ${base}`);
   const out = [];
   const visit = (dir) => {
     let entries;

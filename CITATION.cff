@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "Si usas Memex Offline en un trabajo académico o docente, cítalo así."
+title: "Memex Offline"
+abstract: >-
+  Buscador personal 100% offline: indexa texto, código, PDF, imágenes, audio y
+  vídeo en local con SQLite FTS5, búsqueda híbrida BM25 + embeddings en CPU,
+  trails asociativos, GUI web, extensión de navegador y servidor MCP. Sin nube,
+  sin telemetría, sin GPU y sin dependencias npm.
+type: software
+license: MIT
+repository-code: "https://github.com/jmarc9901/memex"
+url: "https://github.com/jmarc9901/memex"
+keywords:
+  - offline
+  - full-text-search
+  - sqlite
+  - fts5
+  - bm25
+  - rag
+  - local-first
+authors:
+  - alias: jmarc9901
+    website: "https://github.com/jmarc9901"
+version: 0.4.0
+date-released: "2026-10-23"

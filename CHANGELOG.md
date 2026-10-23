@@ -3,52 +3,82 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 versionado [semántico](https://semver.org/lang/es/).
 
-Aviso de honestidad: el proyecto **no tenía etiquetas (tags)** hasta la `v0.3.0`,
-así que las entradas de abajo se reconstruyeron a partir del histórico de git y
+Aviso de honestidad: el proyecto **no tuvo etiquetas (tags)** hasta la `v0.3.0`,
+así que las entradas anteriores se reconstruyeron a partir del histórico de git y
 de [`docs/ROADMAP.md`](docs/ROADMAP.md), no de notas de release. Además, la
 **`0.2.0` nunca existió**: `package.json` pasó de `0.1.0` a `0.3.0` en un salto.
 
-## [Sin publicar]
+## [0.4.0] - 2026-10-23
 
 ### Añadido
 
-- Test de calidad de recuperación (`test/quality.test.js`): corpus etiquetado de
-  8 documentos y 8 consultas, con métricas **precision@1 / recall@3** (baseline
-  medido: 1.00 y 1.00) y un test de caracterización de la frontera léxica del
-  proveedor `hash`.
-- Guardia de versión de Node en `bin/memex.js`: corta antes de importar y explica
-  el motivo en lugar de fallar con un error opaco al cargar `node:sqlite`.
-- `--allow-remote` en `serve`, que permite escuchar fuera de loopback de forma
-  explícita.
-- Cabeceras de seguridad en la GUI (`Content-Security-Policy`, `nosniff`,
-  `X-Frame-Options`, `Referrer-Policy`).
-- Gobernanza del repositorio: `CONTRIBUTING.md`, `SECURITY.md`,
-  `CODE_OF_CONDUCT.md`, plantillas de issue y PR, `CODEOWNERS`, Dependabot,
-  `.editorconfig`, `.gitattributes` y este `CHANGELOG.md`.
-- `npm run coverage` (cobertura integrada de `node --test`) y caché de npm en CI.
+- **Poda de archivos borrados**: reindexar elimina del índice los documentos que
+  ya no existen bajo esa carpeta. Solo afecta a la raíz indexada (indexar `~/A`
+  nunca borra `~/B`) y se puede desactivar con `--no-prune`. El resumen del CLI,
+  la GUI y la API informan de `pruned`.
+- **Indexado asíncrono en el servidor** (`indexFolderAsync`): cede el event loop
+  entre archivos para que la GUI y la API no se congelen al indexar carpetas
+  grandes. El CLI mantiene la variante síncrona.
+- **Embeddings ONNX por lotes**: `embedder.batch(texts)` procesa 16 fragmentos por
+  pasada; si un lote falla, se reintenta de uno en uno para no perder ninguno.
+- **Soporte de modelos *cased***: `embed_cased` (y `MEMEX_EMBED_CASED`) conserva
+  mayúsculas y acentos para el BERT multilingüe. El MiniLM inglés sigue *uncased*.
+- **Umbral semántico por proveedor**: 0.1 con `hash`, 0.3 con `onnx`; los cosenos
+  neuronales son mucho más altos y el umbral antiguo dejaba pasar ruido.
+- **Invalidación de la caché vectorial entre procesos** con `PRAGMA data_version`:
+  `memex serve` ya no devuelve resultados viejos cuando `memex index` escribe
+  desde otra terminal.
+- **Validación de rutas**: indexar una ruta inexistente o un archivo suelto es un
+  error claro (400 en la API, exit 1 en el CLI) en vez de un éxito con ceros.
+- **Tope de resultados en el CLI** (1–100), igual que en la API.
+- **La UI expone más API**: documentos relacionados por resultado, selector de
+  límite, botón «Indexar + vectores» y resumen de indexado con eliminados.
+- **Accesibilidad de la GUI**: `aria-selected`/`aria-controls`, paneles
+  `tabpanel`, `aria-live` en los mensajes, navegación con flechas entre pestañas y
+  atajo `/` para buscar.
+- **Helpers puros de la UI** en `web/lib.js`, con tests en Node (sin navegador).
+- **Tests de la extensión** con la API de Chrome simulada y **tests de la poda,
+  del batching, del tokenizer cased y de la caché entre conexiones**. La suite
+  pasa de 118 a 144 pruebas.
+- **Iconos de la extensión** generados por código (`scripts/make-icons.js`, sin
+  dependencias) y declarados en el manifest.
+- **Documentación nueva**: [docs/API.md](docs/API.md),
+  [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md), `CITATION.cff` y banner/logo SVG.
+- `--force-download` para volver a bajar el modelo ONNX a propósito.
 
 ### Cambiado
 
-- **Mínimo de Node y matriz de CI: 22.13.0** (antes 22.5.0). `node:sqlite` exigía
-  `--experimental-sqlite` antes de 22.13, así que en 22.5.0 los tests no podían
-  ni cargar `src/db.js`.
-- `serve` rechaza escuchar fuera de loopback salvo `--allow-remote`: la API no
-  tiene autenticación.
-- El servido de estáticos se confina con `path.relative` en lugar de un prefijo
-  de cadena.
-- `bin/memex.js` pasa a modo `100755` (tiene shebang).
-- La extensión declara la misma versión que el paquete (`0.3.0`).
-- `package.json` declara `author` y el paquete incluye `package-lock.json` para
-  permitir `npm ci` y auditoría.
+- **`memex init` reutiliza el modelo ya descargado**: antes volvía a bajar 23 MB
+  (o 180 MB) en cada ejecución.
+- `POST /api/index` y `POST /api/embed` validan `path` y responden **400** si no
+  existe o no es una carpeta.
+- Las respuestas de la API llevan `cache-control: no-store`.
+- `README.md` y `README.en.md` quedan sincronizados sección a sección y
+  reescritos con banner, índice, tabla comparativa y estado real del proyecto.
+- La versión del paquete y de la extensión pasan a **0.4.0**.
+- El README en inglés ya no omite secciones (extensión, benchmarks, roadmap, LLM
+  local) que sí estaban en español.
 
 ### Corregido
 
-- Un vector de consulta con dimensiones distintas a las del índice ya no se
-  trunca en silencio: se avisa una vez y se descartan los resultados semánticos.
-- Las opciones de CLI desconocidas se avisan por stderr (antes se ignoraban en
-  silencio y por stdout rompían el `--json` de quien lo parsea).
-- El test del prefiltro binario inserta sus 2000 fragmentos en una transacción:
-  la suite completa pasa de ~127 s a ~23 s.
+- **Los archivos borrados del disco ya no se quedan en el índice** (el caso más
+  visible: resultados con rutas muertas y estadísticas infladas).
+- **El tokenizer ONNX ya no fuerza minúsculas sin acentos** en modelos *cased*.
+- `memex init` ya no dice «Listo» tras un indexado que no indexó nada por una
+  ruta inválida.
+- `isLocal` comparaba una regex sobre la URL completa: `http://localhost.evil.example`
+  se trataba como local. Ahora se compara el `hostname` con `new URL()`.
+- `whisperAvailable` ya no detecta cualquier binario llamado `main` del `PATH`
+  como transcripción disponible.
+- La conversión a WAV de audio compara la extensión en minúsculas (`.WAV`).
+- El `CHANGELOG` afirmaba que el tarball de npm incluía `package-lock.json`; no es
+  así. El lockfile está en el repositorio (para `npm ci` y auditoría), no en el
+  paquete publicado.
+- `docs/ROADMAP.md` atribuía OCR a PDFs escaneados; no existe rasterizado + OCR.
+- `--no-model` en el instalador de la UI limpia las rutas de modelo anteriores en
+  vez de dejar una configuración incoherente.
+- `--force` (reindexar) ya no provoca una redescarga del modelo: eso es
+  `--force-download`.
 
 ## [0.3.0] - 2026-10-11
 

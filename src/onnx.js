@@ -2,12 +2,19 @@
 //
 // Este modulo aporta la "semantica real" que la Ruta 1 del roadmap dejaba
 // pendiente: en lugar de feature hashing (lexico), usa un modelo BERT pequeno
-// (p. ej. all-MiniLM-L6-v2, ~90 MB) ejecutado con onnxruntime-node. Es
-// COMPLETAMENTE OPCIONAL: si el paquete o el modelo no estan, `createEmbedder`
-// avisa y cae al proveedor "hash". No hay dependencias obligatorias ni red.
+// (p. ej. all-MiniLM-L6-v2) ejecutado con onnxruntime-node. Es COMPLETAMENTE
+// OPCIONAL: si el paquete o el modelo no estan, `createEmbedder` avisa y cae al
+// proveedor "hash". No hay dependencias obligatorias ni red.
 //
 // Flujo: texto -> tokenizer WordPiece (vocab.txt) -> input_ids/attention_mask
 // -> sesion ONNX -> last_hidden_state -> mean pooling -> normalizacion L2.
+//
+// Dos detalles que antes se ignoraban y degradaban la calidad:
+//   - Los modelos *cased* (el BERT multilingue) esperan mayusculas y acentos.
+//     `basicClean` los respeta cuando `cased` esta activo.
+//   - Los modelos aceptan lotes: `embedder.batch(textos)` procesa varios textos
+//     por pasada en vez de uno, que es la diferencia entre minutos y horas al
+//     vectorizar un corpus grande.
 import { createRequire } from "node:module";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
@@ -38,12 +45,22 @@ export function onnxAvailable() {
 const ACCENTS = /[\u0300-\u036f]/g;
 
 /**
- * Normaliza el texto como BERT uncased: minusculas, sin acentos, separando la
- * puntuacion como tokens propios.
+ * Normaliza el texto como BERT: minusculas y sin acentos si el modelo es
+ * *uncased* (MiniLM ingles), o conservando mayusculas y acentos si es *cased*
+ * (BERT multilingue). En ambos casos separa la puntuacion como token propio.
  * @param {string} text
+ * @param {{cased?:boolean}} [opts]
  */
-export function basicClean(text) {
-  return String(text ?? "")
+export function basicClean(text, { cased = false } = {}) {
+  const value = String(text ?? "");
+  if (cased) {
+    return value
+      .normalize("NFC")
+      .replace(/[^\p{L}\p{N}\s]/gu, " $& ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  return value
     .toLowerCase()
     .normalize("NFD")
     .replace(ACCENTS, "")
@@ -103,7 +120,7 @@ export function wordpiece(token, vocab, maxChars = 100) {
  * Convierte texto en tensores de entrada estilo BERT.
  * @param {string} text
  * @param {Map<string, number>} vocab
- * @param {{maxLen?:number}} [opts]
+ * @param {{maxLen?:number, cased?:boolean}} [opts]
  * @returns {{ids:number[], mask:number[], typeIds:number[]}}
  */
 export function tokenizeBert(text, vocab, opts = {}) {
@@ -114,7 +131,7 @@ export function tokenizeBert(text, vocab, opts = {}) {
   const pad = vocab.get("[PAD]") ?? 0;
 
   const ids = [cls];
-  for (const token of basicClean(text).split(" ")) {
+  for (const token of basicClean(text, { cased: opts.cased }).split(" ")) {
     if (!token) continue;
     const pieces = wordpiece(token, vocab);
     if (!pieces) {
@@ -136,7 +153,7 @@ export function tokenizeBert(text, vocab, opts = {}) {
 
 /**
  * Mean pooling sobre `last_hidden_state` respetando la attention mask.
- * @param {Float32Array|number[]} data  datos planos [1, seq, dim]
+ * @param {Float32Array|number[]} data  datos planos [seq, dim]
  * @param {number[]} dims
  * @param {number[]} mask
  * @returns {Float32Array}
@@ -174,11 +191,13 @@ export function resolveVocabPath(modelPath, tokenizerPath) {
 /**
  * Crea un embedder neuronal asincrono a partir de un modelo ONNX local.
  * Carga la sesion de forma perezosa en la primera llamada.
- * @param {{model:string, tokenizer?:string, maxLen?:number}} opts
- * @returns {((text:string)=>Promise<Float32Array>) & {provider:string, dim?:number, model:string}}
+ * @param {{model:string, tokenizer?:string, maxLen?:number, cased?:boolean}} opts
+ * @returns {((text:string)=>Promise<Float32Array>) & {
+ *   provider:string, dim?:number, model:string, cased:boolean,
+ *   batch:(texts:string[])=>Promise<Float32Array[]>}}
  */
 export function createOnnxEmbedder(opts) {
-  const { model, tokenizer, maxLen = 256 } = opts;
+  const { model, tokenizer, maxLen = 256, cased = false } = opts;
   const vocabPath = resolveVocabPath(model, tokenizer);
   let sessionPromise = null;
   let vocab = null;
@@ -193,35 +212,81 @@ export function createOnnxEmbedder(opts) {
     return sessionPromise;
   };
 
-  const fn = async (text) => {
-    const session = await getSession();
-    if (!vocab) vocab = loadVocab(vocabPath);
-    const runtime = loadOrt();
-    const { ids, mask, typeIds } = tokenizeBert(text, vocab, { maxLen });
-    const toTensor = (values) =>
-      new runtime.Tensor("int64", BigInt64Array.from(values, (v) => BigInt(v)), [1, values.length]);
-
-    let out;
+  /** Ejecuta la sesion con token_type_ids y reintenta sin ellos si el modelo no los acepta. */
+  const runSession = async (session, runtime, encoded, batchSize) => {
+    const tensor = (values) =>
+      new runtime.Tensor("int64", values, [batchSize, maxLen]);
     try {
-      out = await session.run({
-        input_ids: toTensor(ids),
-        attention_mask: toTensor(mask),
-        token_type_ids: toTensor(typeIds),
+      return await session.run({
+        input_ids: tensor(encoded.ids),
+        attention_mask: tensor(encoded.mask),
+        token_type_ids: tensor(encoded.typeIds),
       });
     } catch {
-      // Algunos modelos no aceptan token_type_ids: reintentamos sin el.
-      out = await session.run({
-        input_ids: toTensor(ids),
-        attention_mask: toTensor(mask),
+      return await session.run({
+        input_ids: tensor(encoded.ids),
+        attention_mask: tensor(encoded.mask),
       });
     }
+  };
+
+  /** Convierte `last_hidden_state` en un vector normalizado por fila. */
+  const vectorsFrom = (out, batch, batchSize) => {
     const hidden = out.last_hidden_state ?? out[Object.keys(out)[0]];
-    const vec = normalize(meanPool(hidden.data, hidden.dims, mask));
-    fn.dim = vec.length;
+    const dims = hidden.dims;
+    const seq = dims[dims.length - 2];
+    const dim = dims[dims.length - 1];
+    const vectors = [];
+    for (let row = 0; row < batchSize; row++) {
+      const from = row * seq * dim;
+      const slice = hidden.data.subarray(from, from + seq * dim);
+      vectors.push(normalize(meanPool(slice, [seq, dim], batch[row].mask)));
+    }
+    return vectors;
+  };
+
+  /**
+   * Vectoriza un lote de textos en una sola pasada.
+   * @param {string[]} texts
+   * @returns {Promise<Float32Array[]>}
+   */
+  const batch = async (texts) => {
+    if (!Array.isArray(texts) || !texts.length) return [];
+    const session = await getSession();
+    const runtime = loadOrt();
+    if (!vocab) vocab = loadVocab(vocabPath);
+
+    const encoded = texts.map((text) => tokenizeBert(text, vocab, { maxLen, cased }));
+    const batchSize = encoded.length;
+    const size = batchSize * maxLen;
+    // Un unico buffer por tensor: el runtime recibe [batchSize, maxLen].
+    const ids = new BigInt64Array(size);
+    const mask = new BigInt64Array(size);
+    const typeIds = new BigInt64Array(size);
+    for (let row = 0; row < batchSize; row++) {
+      const enc = encoded[row];
+      for (let j = 0; j < maxLen; j++) {
+        ids[row * maxLen + j] = BigInt(enc.ids[j]);
+        mask[row * maxLen + j] = BigInt(enc.mask[j]);
+        typeIds[row * maxLen + j] = BigInt(enc.typeIds[j]);
+      }
+    }
+
+    const out = await runSession(session, runtime, { ids, mask, typeIds }, batchSize);
+    const vectors = vectorsFrom(out, encoded, batchSize);
+    if (vectors[0]) fn.dim = vectors[0].length;
+    return vectors;
+  };
+
+  /** Vectoriza un unico texto (azucar sobre `batch`). */
+  const fn = async (text) => {
+    const [vec] = await batch([String(text ?? "")]);
     return vec;
   };
 
   fn.provider = "onnx";
   fn.model = model;
+  fn.cased = Boolean(cased);
+  fn.batch = batch;
   return fn;
 }

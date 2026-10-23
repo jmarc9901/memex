@@ -1,6 +1,6 @@
 {
   "name": "memex",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Memex Offline - tu buscador personal 100% offline (full-text FTS5 + embeddings en CPU, sin LLM, sin GPU, sin dependencias)",
   "author": "jmarc9901 <jmarc9901@users.noreply.github.com>",
   "type": "module",
@@ -37,7 +37,9 @@
   "scripts": {
     "test": "node --test",
     "coverage": "node --test --experimental-test-coverage",
+    "bench": "node bin/memex.js bench",
     "check": "node scripts/check.js",
+    "icons": "node scripts/make-icons.js",
     "prepublishOnly": "npm run check && npm test",
     "start": "node bin/memex.js serve",
     "serve": "node bin/memex.js serve"
@@ -47,9 +49,20 @@
     "src",
     "web",
     "extension",
+    "assets",
     "docs",
+    "scripts",
+    "install-cli.sh",
+    "install-cli.cmd",
+    "install-ui.sh",
+    "install-ui.cmd",
     "README.md",
     "README.en.md",
+    "CHANGELOG.md",
+    "CITATION.cff",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
     "LICENSE"
   ]
 }

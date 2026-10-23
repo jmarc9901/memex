@@ -27,8 +27,8 @@ import {
 const HELP = `Memex Offline - buscador personal 100% offline (SQLite FTS5 + embeddings en CPU)
 
 Uso:
-  memex init [carpeta] [--no-model] [--model RUTA] [--tokenizer RUTA] [--force] [--db RUTA]
-  memex index [carpeta] [--force] [--no-embed] [--db RUTA]
+  memex init [carpeta] [--no-model] [--model RUTA] [--tokenizer RUTA] [--lang en|es] [--quality auto|speed|best] [--force] [--force-download] [--db RUTA]
+  memex index [carpeta] [--force] [--no-embed] [--no-prune] [--db RUTA]
   memex search <consulta> [--mode hybrid|lexical|semantic] [-n N] [--any] [--json]
   memex ask <pregunta> [-n N] [--json]
   memex export <consulta> [--format jsonl|csv|md] [-o ARCHIVO] [-n N] [--any] [--mode MODO]
@@ -53,7 +53,13 @@ Uso:
 
 Opciones:
   --db RUTA     Base de datos del indice (por defecto ./.memex/index.db o $MEMEX_DB)
+  --model RUTA  Modelo ONNX local (si no, se descarga el recomendado)
+  --lang L      Idioma del modelo: en (defecto) o es (multilingue, mas pesado)
+  --quality Q   Prioridad del modelo: auto (defecto), speed o best
   --force       Reindexa todo, ignorando la cache por mtime/tamano
+  --force-download
+                Vuelve a descargar el modelo ONNX aunque ya este en disco
+  --no-prune    No elimina del indice los archivos borrados del disco
   --no-embed    Indexa solo texto, sin calcular embeddings
   --mode MODO   hybrid (defecto), lexical o semantic
   -n, --limit   Numero maximo de resultados (por defecto 20)
@@ -102,14 +108,24 @@ function makeColor(useColor) {
 
 const VALUE_FLAGS = new Set([
   "--db", "--limit", "-n", "--mode", "--format", "-o", "--out", "--host", "--port",
-  "--model", "--tokenizer", "--dim",
+  "--model", "--tokenizer", "--dim", "--lang", "--quality",
 ]);
+
+// Tope de resultados en el CLI, igual que en la API: `-n 1000000` no debe
+// intentar materializar medio indice en memoria.
+const MAX_RESULTS = 100;
+
+/** Limite pedido por el usuario, acotado a [1, MAX_RESULTS]. */
+function queryLimit(flags, fallback) {
+  const raw = Number.isFinite(flags.limit) ? flags.limit : fallback;
+  return Math.min(Math.max(1, Math.trunc(raw)), MAX_RESULTS);
+}
 
 // Flags de tipo booleano que el parser si reconoce. Cualquier otra `--flag`
 // desconocida se registra en `flags._unknown` para avisar por stderr: antes se
 // aceptaba en silencio, asi que una errata como `--limt 5` no hacia nada.
 const BOOL_FLAGS = new Set([
-  "--force", "--no-embed", "--any", "--json", "--help", "-h",
+  "--force", "--force-download", "--no-embed", "--no-prune", "--any", "--json", "--help", "-h",
   "--ping", "--no-model", "--hash", "--allow-remote",
 ]);
 
@@ -136,6 +152,8 @@ export function parseArgs(argv) {
       case "--model": flags.model = value(); break;
       case "--tokenizer": flags.tokenizer = value(); break;
       case "--dim": flags.dim = value(); break;
+      case "--lang": flags.lang = value(); break;
+      case "--quality": flags.quality = value(); break;
       case "--desc": flags.desc = value(); break;
       case "--note": flags.note = value(); break;
       case "--label": flags.label = value(); break;
@@ -243,6 +261,7 @@ function cmdIndex({ out, color, flags, dbPath }) {
   const started = Date.now();
   const summary = indexFolder(db, root, {
     force: flags.force,
+    prune: !flags["no-prune"],
     embedder,
     onProgress: ({ done, total, path }) => {
       if (out.isTTY) out.write(`\r${color.dim(`indexando ${done}/${total} - ${shorten(path, 60)}`)}`);
@@ -263,6 +282,7 @@ function cmdIndex({ out, color, flags, dbPath }) {
       `  actualizados        : ${color.cyan(summary.updated)}\n` +
       `  sin cambios         : ${summary.unchanged}\n` +
       `  no indexables       : ${summary.unsupported}\n` +
+      `  eliminados          : ${summary.pruned ? color.cyan(summary.pruned) : 0}\n` +
       `  errores             : ${summary.failed ? color.red(summary.failed) : 0}\n` +
       `  embeddings          : ${embedder ? `${embedder.provider} (dim ${embedder.dim})` : "desactivados"}\n` +
       `  tiempo              : ${elapsed}s\n` +
@@ -282,7 +302,7 @@ async function cmdSearch({ out, color, flags, dbPath }) {
   const config = loadConfig();
   const embedder = mode === "lexical" ? null : createEmbedder(config);
   const db = openDatabase(dbPath);
-  const limit = Number.isFinite(flags.limit) ? flags.limit : 20;
+  const limit = queryLimit(flags, 20);
   const started = Date.now();
   const queryVec = await resolveQueryVec(embedder, queryText);
   const rows = hybridSearch(db, queryText, { mode, limit, any: Boolean(flags.any), embedder, queryVec });
@@ -320,7 +340,7 @@ async function cmdAsk({ out, color, flags, dbPath }) {
   const question = flags._.slice(1).join(" ").trim();
   if (!question) throw new Error('falta la pregunta. Ej: memex ask "que conclusiones saque"');
 
-  const limit = Number.isFinite(flags.limit) ? flags.limit : 6;
+  const limit = queryLimit(flags, 6);
   const config = loadConfig();
   const embedder = createEmbedder(config);
   const db = openDatabase(dbPath);
@@ -367,7 +387,7 @@ async function cmdExport({ out, color, flags, dbPath }) {
   const config = loadConfig();
   const embedder = mode === "lexical" ? null : createEmbedder(config);
   const db = openDatabase(dbPath);
-  const limit = Number.isFinite(flags.limit) ? flags.limit : 20;
+  const limit = queryLimit(flags, 20);
   const queryVec = await resolveQueryVec(embedder, queryText);
   const rows = hybridSearch(db, queryText, { mode, limit, any: Boolean(flags.any), embedder, queryVec });
   db.close();
@@ -740,7 +760,7 @@ async function cmdTrail({ out, color, flags, dbPath }) {
     }
     if (sub === "suggest") {
       if (!name) throw new Error("uso: memex trail suggest <nombre>");
-      const res = await suggestTrail(db, name, { limit: Number.isFinite(flags.limit) ? flags.limit : 10, embedder });
+      const res = await suggestTrail(db, name, { limit: queryLimit(flags, 10), embedder });
       if (!res) throw new Error(`no existe el trail: ${name}`);
       if (flags.json) {
         out.write(JSON.stringify(res, null, 2) + "\n");
@@ -767,7 +787,7 @@ async function cmdTrail({ out, color, flags, dbPath }) {
 async function cmdRelate({ out, color, flags, dbPath }) {
   const ref = flags._.slice(1).join(" ").trim();
   if (!ref) throw new Error("uso: memex relate <ruta|consulta>");
-  const limit = Number.isFinite(flags.limit) ? flags.limit : 10;
+  const limit = queryLimit(flags, 10);
   const config = loadConfig();
   const embedder = createEmbedder(config);
   const db = openDatabase(dbPath);

@@ -85,7 +85,12 @@ test("runInit --no-model configura hash e indexa la carpeta", async () => {
   try {
     const corpus = join(root, "docs");
     mkdirSync(corpus);
-    writeFileSync(join(corpus, "a.md"), "Texto sobre ansiedad y proyecto X.\n");
+    // Dos parrafos de ~900 caracteres = dos fragmentos en un solo archivo.
+    // Antes el resumen sumaba archivos y fragmentos y decia "1 con vector".
+    writeFileSync(
+      join(corpus, "a.md"),
+      `${"ansiedad y proyecto X. ".repeat(45)}\n\n${"bienestar y calma. ".repeat(50)}\n`
+    );
 
     const out = collector();
     const dbPath = join(root, "index.db");
@@ -103,7 +108,9 @@ test("runInit --no-model configura hash e indexa la carpeta", async () => {
     const db = openDatabase(dbPath);
     try {
       assert.equal(stats(db).files, 1);
-      assert.ok(stats(db).embedded >= 1);
+      assert.equal(stats(db).chunks, 2);
+      assert.equal(stats(db).embedded, 2);
+      assert.match(out.text, /fragmentos\s*:\s*2 con vector/);
     } finally {
       db.close();
     }

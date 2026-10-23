@@ -11,3 +11,7 @@ coverage/
 
 # Claves de la capa RAG opcional (MEMEX_RAG_API_KEY, rag.api_key)
 .env
+
+# Lanzadores generados por scripts/install-ui.js (llevan rutas absolutas)
+memex-ui.sh
+memex-ui.cmd

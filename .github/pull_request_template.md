@@ -16,6 +16,8 @@
 - [ ] Si cambia el comportamiento visible: anotado en `CHANGELOG.md` ("Sin publicar")
 - [ ] Sin dependencias nuevas (regla cero; ver [CONTRIBUTING.md](../CONTRIBUTING.md))
 - [ ] Si cambia un README, el otro idioma queda sincronizado
+- [ ] Si cambia la API HTTP o los módulos/invariantes, actualizados
+      `docs/API.md` y/o `docs/ARQUITECTURA.md`
 
 ## Notas para quien revisa
 

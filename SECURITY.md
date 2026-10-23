@@ -16,6 +16,8 @@ está endurecido:
   CORS. Esto impide que una web que visites lea tu índice con `fetch`.
 - **La GUI lleva CSP** sin recursos externos ni scripts inline, `nosniff`,
   `X-Frame-Options: DENY` y `Referrer-Policy: no-referrer`.
+- **La API responde con `cache-control: no-store`** y valida `path` (debe existir
+  y ser una carpeta), `mode` y `limit`; los errores de uso son 400, no 500.
 - **El servidor de ficheros está confinado a `web/`** (resuelto con
   `path.relative`, no con un prefijo de cadena).
 - **Sin telemetría.** El único tráfico de red es hacia el proveedor RAG que
@@ -29,6 +31,12 @@ está endurecido:
   configuración (incluida `rag.api_key` si la guardas en el fichero de config).
   Prefiere variables de entorno (`MEMEX_RAG_API_KEY`) a escribir la clave.
 - El índice se guarda sin cifrar (SQLite). No hay gestión de secretos.
+- La API permite indexar **cualquier carpeta legible por el usuario** que ejecuta
+  el servidor. Es el comportamiento esperado de una herramienta local; si activas
+  `--allow-remote`, quien alcance el puerto puede apuntar a rutas del sistema.
+- La descarga del modelo en `init` viene de Hugging Face por HTTPS pero **no
+  verifica un checksum**. Si necesitas integridad estricta, descarga el `.onnx` y
+  el `vocab.txt` por tu cuenta y usa `--model`/`--tokenizer`.
 - Las herramientas externas opcionales (`pdftotext`, `tesseract`, `whisper`,
   `ffmpeg`) se ejecutan con la ruta del fichero indexado como argumento, sin
   `shell`, así que no hay inyección de comandos; si una de ellas tiene una
@@ -36,7 +44,7 @@ está endurecido:
 
 ## Versiones soportadas
 
-Solo la última versión publicada (hoy `0.3.x`) recibe correcciones de seguridad.
+Solo la última versión publicada (hoy `0.4.x`) recibe correcciones de seguridad.
 
 ## Cómo reportar
 

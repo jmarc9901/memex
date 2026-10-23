@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" role="img" aria-label="Memex Offline - buscador personal 100% offline">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#12151c"/>
+      <stop offset="1" stop-color="#0b0d11"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cf0b4"/>
+      <stop offset="1" stop-color="#2f9d6b"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.035" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="320" fill="url(#bg)"/>
+  <rect width="1280" height="320" fill="url(#grid)"/>
+  <circle cx="1180" cy="40" r="220" fill="#4cc38a" opacity="0.06"/>
+
+  <!-- marca -->
+  <g transform="translate(56 84)">
+    <rect width="136" height="136" rx="32" fill="#171a21" stroke="#2a3242" stroke-width="2"/>
+    <g fill="none" stroke="url(#accent)" stroke-linecap="round">
+      <circle cx="62" cy="60" r="29" stroke-width="10"/>
+      <path d="M83 81 L108 106" stroke-width="12"/>
+    </g>
+  </g>
+
+  <!-- texto -->
+  <text x="224" y="140" font-family="ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif"
+        font-size="58" font-weight="700" fill="#e6e9ef" letter-spacing="-0.5">Memex Offline</text>
+  <text x="226" y="182" font-family="ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif"
+        font-size="22" fill="#9aa3b2">Tu buscador personal, 100% offline · sin nube, sin GPU, sin dependencias</text>
+
+  <!-- chips -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7cf0b4">
+    <g>
+      <rect x="226" y="210" width="132" height="34" rx="17" fill="#4cc38a" fill-opacity="0.1" stroke="#2f9d6b" stroke-opacity="0.5"/>
+      <text x="246" y="232">SQLite FTS5</text>
+    </g>
+    <g>
+      <rect x="370" y="210" width="126" height="34" rx="17" fill="#4cc38a" fill-opacity="0.1" stroke="#2f9d6b" stroke-opacity="0.5"/>
+      <text x="390" y="232">BM25 + RRF</text>
+    </g>
+    <g>
+      <rect x="508" y="210" width="150" height="34" rx="17" fill="#4cc38a" fill-opacity="0.1" stroke="#2f9d6b" stroke-opacity="0.5"/>
+      <text x="528" y="232">ONNX opcional</text>
+    </g>
+    <g>
+      <rect x="670" y="210" width="70" height="34" rx="17" fill="#4cc38a" fill-opacity="0.1" stroke="#2f9d6b" stroke-opacity="0.5"/>
+      <text x="690" y="232">MCP</text>
+    </g>
+  </g>
+
+  <!-- tarjeta decorativa -->
+  <g transform="translate(900 62)">
+    <rect width="320" height="196" rx="16" fill="#171a21" stroke="#2a2f3a"/>
+    <circle cx="24" cy="26" r="5" fill="#4cc38a"/>
+    <text x="40" y="31" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="14" fill="#9aa3b2">diario.md</text>
+    <rect x="20" y="54" width="240" height="10" rx="5" fill="#2a2f3a"/>
+    <rect x="20" y="74" width="196" height="10" rx="5" fill="#2a2f3a"/>
+    <rect x="20" y="108" width="86" height="24" rx="6" fill="#e0b341" fill-opacity="0.28"/>
+    <text x="30" y="125" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="14" fill="#e6e9ef">ansiedad</text>
+    <rect x="114" y="108" width="120" height="10" rx="5" fill="#2a2f3a"/>
+    <rect x="20" y="154" width="270" height="10" rx="5" fill="#2a2f3a"/>
+    <rect x="20" y="174" width="170" height="10" rx="5" fill="#2a2f3a"/>
+  </g>
+</svg>

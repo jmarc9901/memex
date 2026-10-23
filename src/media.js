@@ -26,11 +26,10 @@ export function whisperModel() {
 }
 
 export function whisperAvailable() {
-  return (
-    hasCommand("whisper-cli", ["--help"]) ||
-    hasCommand("main", ["--help"]) ||
-    hasCommand("whisper", ["--help"])
-  );
+  // `main` era el nombre del binario legacy de whisper.cpp, pero cualquier
+  // proyecto compilado deja un `main` en el PATH: se detectaba transcripcion
+  // donde no la habia. Solo se aceptan los nombres inequivocos.
+  return hasCommand("whisper-cli", ["--help"]) || hasCommand("whisper", ["--help"]);
 }
 
 /**
@@ -54,16 +53,13 @@ export function transcribeMedia(path) {
 }
 
 function transcribeWithWhisperCpp(path, model, tmp) {
-  const bin = hasCommand("whisper-cli", ["--help"])
-    ? "whisper-cli"
-    : hasCommand("main", ["--help"])
-      ? "main"
-      : null;
+  const bin = hasCommand("whisper-cli", ["--help"]) ? "whisper-cli" : null;
   if (!bin) return null;
 
-  // whisper.cpp necesita audio PCM; convertimos con ffmpeg si esta disponible.
+  // whisper.cpp necesita audio PCM 16 kHz mono; convertimos con ffmpeg salvo
+  // que ya sea un WAV.
   let input = path;
-  if (!AUDIO_EXTENSIONS.has(extname(path).toLowerCase()) || extname(path) !== ".wav") {
+  if (extname(path).toLowerCase() !== ".wav") {
     if (hasCommand("ffmpeg", ["-version"])) {
       const wav = join(tmp, "audio.wav");
       const ok = runCapture("ffmpeg", ["-y", "-i", path, "-ar", "16000", "-ac", "1", wav]);

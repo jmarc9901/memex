@@ -78,3 +78,51 @@ test("embedIndex con force recomputa todos los vectores", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/** Embedder asincrono que tambien sabe procesar lotes. */
+function batchEmbedder(dim = 32) {
+  const calls = [];
+  const fn = async (text) => hashEmbed(text, { dim });
+  fn.provider = "onnx";
+  fn.dim = dim;
+  fn.batch = async (texts) => {
+    calls.push(texts.length);
+    return texts.map((text) => hashEmbed(text, { dim }));
+  };
+  fn.calls = calls;
+  return fn;
+}
+
+test("embedIndex usa el lote del proveedor en vez de ir texto a texto", async () => {
+  const root = makeCorpus();
+  const db = openDatabase(join(root, ".memex", "index.db"));
+  const embedder = batchEmbedder();
+  try {
+    indexFolder(db, root, { embedder: null });
+    const res = await embedIndex(db, { embedder });
+    assert.equal(res.embedded, 2);
+    assert.deepEqual(embedder.calls, [2], "los dos fragmentos van en una llamada");
+    assert.equal(stats(db).embedded, 2);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("si el lote falla, embedIndex reintenta de uno en uno", async () => {
+  const root = makeCorpus();
+  const db = openDatabase(join(root, ".memex", "index.db"));
+  const embedder = batchEmbedder();
+  embedder.batch = async () => {
+    throw new Error("lote roto");
+  };
+  try {
+    indexFolder(db, root, { embedder: null });
+    const res = await embedIndex(db, { embedder });
+    assert.equal(res.embedded, 2, "ningun fragmento se pierde por un lote fallido");
+    assert.equal(res.failed, 0);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

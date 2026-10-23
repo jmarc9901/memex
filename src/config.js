@@ -13,6 +13,7 @@ export const DEFAULT_CONFIG = {
   embed_model: "", // ruta a un modelo .onnx (proveedor "onnx")
   embed_tokenizer: "", // ruta a vocab.txt (por defecto, junto al modelo)
   embed_max_len: 256, // longitud maxima de tokens para el tokenizer BERT
+  embed_cased: false, // true para modelos cased (BERT multilingue): conserva mayusculas y acentos
   rag: {
     enabled: false,
     provider: "openai-compatible", // openai-compatible | groq | openrouter
@@ -54,6 +55,9 @@ export function loadConfig() {
   if (process.env.MEMEX_EMBED_MODEL) config.embed_model = process.env.MEMEX_EMBED_MODEL;
   if (process.env.MEMEX_EMBED_TOKENIZER) config.embed_tokenizer = process.env.MEMEX_EMBED_TOKENIZER;
   if (process.env.MEMEX_EMBED_MAX_LEN) config.embed_max_len = Number(process.env.MEMEX_EMBED_MAX_LEN);
+  if (process.env.MEMEX_EMBED_CASED !== undefined) {
+    config.embed_cased = /^(1|true|yes|si)$/i.test(process.env.MEMEX_EMBED_CASED);
+  }
   if (process.env.MEMEX_RAG_API_KEY) config.rag.api_key = process.env.MEMEX_RAG_API_KEY;
   if (process.env.MEMEX_RAG_BASE_URL) config.rag.base_url = process.env.MEMEX_RAG_BASE_URL;
   if (process.env.MEMEX_RAG_MODEL) config.rag.model = process.env.MEMEX_RAG_MODEL;

@@ -22,16 +22,16 @@
       </div>
     </header>
 
-    <nav class="tabs" role="tablist">
-      <button class="tab active" data-tab="search" role="tab">Buscar</button>
-      <button class="tab" data-tab="ask" role="tab">Preguntar</button>
-      <button class="tab" data-tab="trails" role="tab">Trails</button>
-      <button class="tab" data-tab="index" role="tab">Indexar</button>
+    <nav class="tabs" role="tablist" aria-label="Secciones">
+      <button class="tab active" id="tab-search" data-tab="search" role="tab" aria-selected="true" aria-controls="panel-search">Buscar</button>
+      <button class="tab" id="tab-ask" data-tab="ask" role="tab" aria-selected="false" aria-controls="panel-ask" tabindex="-1">Preguntar</button>
+      <button class="tab" id="tab-trails" data-tab="trails" role="tab" aria-selected="false" aria-controls="panel-trails" tabindex="-1">Trails</button>
+      <button class="tab" id="tab-index" data-tab="index" role="tab" aria-selected="false" aria-controls="panel-index" tabindex="-1">Indexar</button>
     </nav>
 
     <main>
       <!-- BUSCAR -->
-      <section class="panel active" id="panel-search">
+      <section class="panel active" id="panel-search" role="tabpanel" aria-labelledby="tab-search" aria-hidden="false">
         <form class="searchbar" id="search-form">
           <input
             id="search-input"
@@ -45,17 +45,23 @@
             <option value="lexical">léxico</option>
             <option value="semantic">semántico</option>
           </select>
+          <select id="search-limit" title="Número máximo de resultados">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
           <label class="any" title="Unir términos con OR">
             <input type="checkbox" id="search-any" /> OR
           </label>
           <button type="submit">Buscar</button>
         </form>
-        <p class="meta" id="search-meta"></p>
+        <p class="meta" id="search-meta" aria-live="polite"></p>
         <div id="search-results" class="results"></div>
       </section>
 
       <!-- PREGUNTAR -->
-      <section class="panel" id="panel-ask">
+      <section class="panel" id="panel-ask" role="tabpanel" aria-labelledby="tab-ask" aria-hidden="true">
         <form class="searchbar" id="ask-form">
           <input
             id="ask-input"
@@ -65,13 +71,13 @@
           />
           <button type="submit">Preguntar</button>
         </form>
-        <p class="meta" id="ask-meta"></p>
+        <p class="meta" id="ask-meta" aria-live="polite"></p>
         <div id="ask-answer" class="answer"></div>
         <div id="ask-context" class="results"></div>
       </section>
 
       <!-- TRAILS -->
-      <section class="panel" id="panel-trails">
+      <section class="panel" id="panel-trails" role="tabpanel" aria-labelledby="tab-trails" aria-hidden="true">
         <div class="searchbar">
           <input id="trail-name" type="text" placeholder="nombre del trail" autocomplete="off" />
           <button type="button" id="trail-create">Crear / abrir</button>
@@ -91,9 +97,9 @@
               <button type="button" id="trail-md">Descargar Markdown</button>
               <button type="button" id="trail-mermaid" class="ghost">Copiar Mermaid</button>
             </div>
-            <form class="searchbar" id="trail-add-form" style="margin-top: 10px">
+            <form class="searchbar trail-add" id="trail-add-form">
               <input id="trail-ref" type="text" placeholder="ruta o consulta a añadir" autocomplete="off" />
-              <input id="trail-note" type="text" placeholder="nota (opcional)" autocomplete="off" style="max-width: 180px" />
+              <input id="trail-note" class="short" type="text" placeholder="nota (opcional)" autocomplete="off" />
               <button type="submit">Añadir nodo</button>
             </form>
           </div>
@@ -101,12 +107,13 @@
       </section>
 
       <!-- INDEXAR -->
-      <section class="panel" id="panel-index">
+      <section class="panel" id="panel-index" role="tabpanel" aria-labelledby="tab-index" aria-hidden="true">
         <form class="searchbar" id="index-form">
           <input id="index-path" type="text" placeholder="ruta absoluta de la carpeta a indexar" autocomplete="off" />
           <button type="submit">Indexar</button>
+          <button type="button" id="index-embed" class="ghost" title="Indexa y calcula los embeddings pendientes (recomendado con ONNX)">Indexar + vectores</button>
         </form>
-        <pre class="log" id="index-log"></pre>
+        <pre class="log" id="index-log" aria-live="polite"></pre>
         <h3 class="section-title">Capacidades y herramientas opcionales</h3>
         <p class="meta" id="tools-summary"></p>
         <div id="tools-list" class="tools"></div>

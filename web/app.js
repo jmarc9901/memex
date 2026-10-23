@@ -1,24 +1,19 @@
 // Memex Offline - GUI web (vanilla JS, sin dependencias).
 // Se sirve desde src/server.js y consume la API local en /api/*.
+import {
+  escapeHtml,
+  renderSnippet,
+  resultCard,
+  trailSvg,
+  formatStats,
+  formatIndexSummary,
+} from "./lib.js";
 
 const $ = (sel) => document.querySelector(sel);
 
 // ---------------------------------------------------------------------------
 // Utilidades
 // ---------------------------------------------------------------------------
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-/** Convierte los marcadores [[termino]] del snippet en <mark> resaltados. */
-function renderSnippet(text) {
-  return escapeHtml(text).replace(/\[\[(.+?)\]\]/g, "<mark>$1</mark>");
-}
 
 async function api(path, options) {
   const res = await fetch(path, options);
@@ -28,22 +23,51 @@ async function api(path, options) {
 }
 
 function setBusy(form, busy) {
-  for (const el of form.querySelectorAll("button, input")) el.disabled = busy;
+  for (const el of form.querySelectorAll("button, input, select")) el.disabled = busy;
 }
 
 // ---------------------------------------------------------------------------
 // Pestañas
 // ---------------------------------------------------------------------------
 
+function activateTab(tab) {
+  for (const other of document.querySelectorAll(".tab")) {
+    const active = other === tab;
+    other.classList.toggle("active", active);
+    other.setAttribute("aria-selected", String(active));
+    other.tabIndex = active ? 0 : -1;
+  }
+  for (const panel of document.querySelectorAll(".panel")) {
+    const active = panel.id === `panel-${tab.dataset.tab}`;
+    panel.classList.toggle("active", active);
+    panel.setAttribute("aria-hidden", String(!active));
+  }
+}
+
 for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
-    document
-      .querySelectorAll(".panel")
-      .forEach((p) => p.classList.toggle("active", p.id === `panel-${tab.dataset.tab}`));
+    activateTab(tab);
     if (tab.dataset.tab === "trails") refreshTrails();
   });
+  tab.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    const tabs = [...document.querySelectorAll(".tab")];
+    const step = event.key === "ArrowRight" ? 1 : -1;
+    const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
+    activateTab(next);
+    next.focus();
+    if (next.dataset.tab === "trails") refreshTrails();
+  });
 }
+
+// Atajo: "/" enfoca la busqueda (salvo que ya se este escribiendo).
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "/" || event.target.closest("input, textarea, select")) return;
+  event.preventDefault();
+  activateTab(document.querySelector('.tab[data-tab="search"]'));
+  $("#search-input").focus();
+});
 
 // ---------------------------------------------------------------------------
 // Estado / estadísticas
@@ -56,8 +80,7 @@ async function refreshStatus() {
     const s = await api("/api/stats");
     dot.className = "dot ok";
     text.textContent = "en línea";
-    $("#footer-stats").textContent =
-      `${s.files} archivos · ${s.chunks} fragmentos · ${s.embedded} con vector · ${s.trails} trails`;
+    $("#footer-stats").textContent = formatStats(s);
   } catch {
     dot.className = "dot off";
     text.textContent = "sin conexión";
@@ -68,23 +91,6 @@ async function refreshStatus() {
 // ---------------------------------------------------------------------------
 // Búsqueda
 // ---------------------------------------------------------------------------
-
-function resultCard(row, i) {
-  const badges = [];
-  if (row.lexical_rank !== null && row.lexical_rank !== undefined) badges.push('<span class="badge lex">lex</span>');
-  if (row.semantic_rank !== null && row.semantic_rank !== undefined) badges.push('<span class="badge sem">sem</span>');
-  const score = Number(row.score);
-  const scoreTxt = Number.isFinite(score) ? `<span class="badge">${score.toFixed(3)}</span>` : "";
-  return `<article class="result">
-    <div class="head">
-      <span class="rank">${i + 1}.</span>
-      <span class="name">${escapeHtml(row.name)}</span>
-      <span class="badges">${badges.join("")}${scoreTxt}</span>
-    </div>
-    <div class="path">${escapeHtml(row.path)}</div>
-    <div class="snippet">${renderSnippet(row.snippet)}</div>
-  </article>`;
-}
 
 $("#search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -98,9 +104,12 @@ $("#search-form").addEventListener("submit", async (event) => {
   meta.textContent = "buscando…";
   results.innerHTML = "";
   const mode = $("#search-mode").value;
+  const limit = $("#search-limit").value;
   const any = $("#search-any").checked ? "&any=1" : "";
   try {
-    const data = await api(`/api/search?q=${encodeURIComponent(query)}&mode=${mode}${any}`);
+    const data = await api(
+      `/api/search?q=${encodeURIComponent(query)}&mode=${mode}&limit=${limit}${any}`
+    );
     meta.textContent = `${data.results.length} resultado(s) en ${data.took_ms} ms · modo ${data.mode}`;
     results.innerHTML = data.results.length
       ? data.results.map(resultCard).join("")
@@ -109,6 +118,41 @@ $("#search-form").addEventListener("submit", async (event) => {
     meta.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
   } finally {
     setBusy(form, false);
+  }
+});
+
+/** "Relacionados": pide /api/relate para la ruta de la tarjeta pulsada. */
+$("#search-results").addEventListener("click", async (event) => {
+  const button = event.target.closest("button.relate");
+  if (!button) return;
+  const card = button.closest(".result");
+  const ref = button.dataset.ref;
+  if (!ref) return;
+
+  button.disabled = true;
+  let box = card.querySelector(".related");
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "related";
+    card.appendChild(box);
+  }
+  try {
+    const data = await api(`/api/relate?ref=${encodeURIComponent(ref)}&limit=5`);
+    box.innerHTML = data.results.length
+      ? "<h4>Documentos relacionados</h4>" +
+        data.results
+          .map(
+            (r) =>
+              `<div class="related-item"><span class="badge">${Number(r.score).toFixed(3)}</span> ` +
+              `<span class="name">${escapeHtml(r.name)}</span> ` +
+              `<span class="path">${escapeHtml(r.path)}</span></div>`
+          )
+          .join("")
+      : '<p class="empty">Sin documentos relacionados.</p>';
+  } catch (err) {
+    box.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+  } finally {
+    button.disabled = false;
   }
 });
 
@@ -148,7 +192,7 @@ $("#ask-form").addEventListener("submit", async (event) => {
     context.innerHTML = data.context.length
       ? data.context
           .map(
-            (c, i) => `<article class="result">
+            (c) => `<article class="result">
               <div class="head"><span class="rank">[${c.n}]</span>
               <span class="name">${escapeHtml(c.name)}</span></div>
               <div class="path">${escapeHtml(c.path)}</div>
@@ -212,58 +256,14 @@ async function openTrail(name) {
       .join("");
     detail.innerHTML =
       (nodes ? `<ol>${nodes}</ol>` : '<p class="empty">Trail vacío.</p>') +
-      (links ? `<h3 style="margin-top:12px">Enlaces</h3>${links}` : "");
-    renderTrailSvg(g);
+      (links ? `<h3 class="edges-title">Enlaces</h3>${links}` : "");
+    $("#trail-graph").innerHTML = trailSvg(g);
   } catch {
     detail.innerHTML = '<p class="empty">Ese trail todavía no existe. Añade un nodo para crearlo.</p>';
     $("#trail-graph").innerHTML = "";
     currentTrail = name;
     $("#trail-name").value = name;
   }
-}
-
-/** Dibuja el grafo del trail como SVG (disposicion circular, sin dependencias). */
-function renderTrailSvg(g) {
-  const box = $("#trail-graph");
-  const nodes = g.nodes ?? [];
-  const links = g.links ?? [];
-  if (!nodes.length) {
-    box.innerHTML = "";
-    return;
-  }
-  const size = 400;
-  const cx = size / 2;
-  const cy = size / 2;
-  const radius = Math.min(150, 40 + nodes.length * 10);
-  const pos = new Map();
-  nodes.forEach((node, i) => {
-    const angle = (i / nodes.length) * Math.PI * 2 - Math.PI / 2;
-    pos.set(node.id, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
-  });
-
-  const esc = (s) => escapeHtml(String(s ?? "").slice(0, 18));
-  const parts = [
-    `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="grafo del trail">`,
-    '<defs><marker id="memex-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>',
-  ];
-  for (const link of links) {
-    const a = pos.get(link.source);
-    const b = pos.get(link.target);
-    if (!a || !b) continue;
-    parts.push(
-      `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" ` +
-        'stroke="currentColor" stroke-opacity="0.4" marker-end="url(#memex-arrow)"/>'
-    );
-  }
-  for (const node of nodes) {
-    const p = pos.get(node.id);
-    parts.push(
-      `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="var(--accent)"/>` +
-        `<text x="${p.x.toFixed(1)}" y="${(p.y - 14).toFixed(1)}" text-anchor="middle" font-size="11" fill="currentColor">${esc(node.label)}</text>`
-    );
-  }
-  parts.push("</svg>");
-  box.innerHTML = parts.join("");
 }
 
 async function fetchTrailFormat(format) {
@@ -334,34 +334,41 @@ $("#trail-add-form").addEventListener("submit", async (event) => {
 // Indexar
 // ---------------------------------------------------------------------------
 
-$("#index-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
+async function runIndex(endpoint, label) {
   const path = $("#index-path").value.trim();
   const log = $("#index-log");
   if (!path) return;
+  const form = $("#index-form");
   setBusy(form, true);
-  log.textContent = "indexando…";
+  log.textContent = `${label}…`;
   try {
-    const s = await api("/api/index", {
+    const summary = await api(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path }),
     });
-    log.textContent =
-      `raíz              : ${s.root}\n` +
-      `archivos escaneados: ${s.scanned}\n` +
-      `nuevos             : ${s.added}\n` +
-      `actualizados       : ${s.updated}\n` +
-      `sin cambios        : ${s.unchanged}\n` +
-      `no indexables      : ${s.unsupported}\n` +
-      `errores            : ${s.failed}`;
+    // `/api/index` devuelve el resumen en la raiz; `/api/embed` anida el
+    // resumen de texto en `text` y deja `embedded` arriba.
+    const main = summary.text ?? summary;
+    log.textContent = formatIndexSummary({
+      ...main,
+      embedded: summary.embedded ?? main.embedded,
+    });
     await refreshStatus();
   } catch (err) {
     log.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
   } finally {
     setBusy(form, false);
   }
+}
+
+$("#index-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  runIndex("/api/index", "indexando");
+});
+
+$("#index-embed").addEventListener("click", () => {
+  runIndex("/api/embed", "indexando y calculando vectores");
 });
 
 // ---------------------------------------------------------------------------
@@ -369,8 +376,7 @@ $("#index-form").addEventListener("submit", async (event) => {
 // ---------------------------------------------------------------------------
 
 async function loadTools() {
-  const list = "#tools-list";
-  const box = $(list);
+  const box = $("#tools-list");
   const summary = $("#tools-summary");
   try {
     const data = await api("/api/tools");
@@ -396,6 +402,7 @@ async function loadTools() {
 // Arranque
 // ---------------------------------------------------------------------------
 
+activateTab(document.querySelector('.tab[data-tab="search"]'));
 refreshStatus();
 refreshTrails();
 loadTools();

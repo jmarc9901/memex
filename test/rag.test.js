@@ -7,7 +7,15 @@ import { join } from "node:path";
 import { openDatabase } from "../src/db.js";
 import { indexFolder } from "../src/indexer.js";
 import { createEmbedder } from "../src/embeddings.js";
-import { ask, buildPrompt, listModels, probeEndpoint, retrieveContext, resolveBaseUrl } from "../src/rag.js";
+import {
+  ask,
+  buildPrompt,
+  isLocalUrl,
+  listModels,
+  probeEndpoint,
+  resolveBaseUrl,
+  retrieveContext,
+} from "../src/rag.js";
 
 function makeDb() {
   const root = mkdtempSync(join(tmpdir(), "memex-rag-"));
@@ -184,5 +192,25 @@ test("ask reporta errores de HTTP y de red sin lanzar", async () => {
   } finally {
     db.close();
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("isLocalUrl solo acepta hosts de loopback reales", () => {
+  for (const url of [
+    "http://localhost:11434/v1",
+    "http://127.0.0.1:8080/v1",
+    "http://127.10.0.5/v1",
+    "http://[::1]:1234/v1",
+    "http://0.0.0.0:8080/v1",
+  ]) {
+    assert.equal(isLocalUrl(url), true, `${url} es local`);
+  }
+  for (const url of [
+    "https://localhost.evil.example/v1",
+    "https://127.0.0.1.evil.example/v1",
+    "https://api.groq.com/openai/v1",
+    "no es una url",
+  ]) {
+    assert.equal(isLocalUrl(url), false, `${url} no es local`);
   }
 });

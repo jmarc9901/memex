@@ -1,33 +1,71 @@
-# Memex Offline
+<p align="center">
+  <img src="assets/banner.svg" alt="Memex Offline: tu buscador personal, 100% offline" width="100%">
+</p>
 
-[![CI](https://github.com/jmarc9901/memex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jmarc9901/memex/actions/workflows/ci.yml)
-[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
-[![Node >= 22.13](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)](package.json)
-[![Dependencias: 0](https://img.shields.io/badge/dependencias-0-success.svg)](package.json)
+<h1 align="center">Memex Offline</h1>
+
+<p align="center">
+  Indexa lo que ya tienes en el disco y encuéntralo sin nube, sin GPU y sin dependencias.
+</p>
+
+<p align="center">
+  <a href="https://github.com/jmarc9901/memex/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jmarc9901/memex/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="LICENSE"><img alt="Licencia: MIT" src="https://img.shields.io/badge/licencia-MIT-blue.svg"></a>
+  <a href="package.json"><img alt="Node >= 22.13" src="https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg"></a>
+  <a href="package.json"><img alt="Dependencias: 0" src="https://img.shields.io/badge/dependencias-0-success.svg"></a>
+  <img alt="Local-first" src="https://img.shields.io/badge/local--first-100%25%20offline-4cc38a">
+  <a href="docs/API.md"><img alt="MCP" src="https://img.shields.io/badge/MCP-stdio-6cb6ff"></a>
+</p>
 
 > English: [README.en.md](README.en.md)
 
-Tu propio buscador personal, **100% offline**, que indexa lo que tienes en el
-disco: texto, notas, código, PDFs, imágenes (OCR), audio y vídeo. Busca por
-palabras exactas (léxico, ranking BM25) y por coincidencia difusa de texto
-(*embeddings* léxicos), responde preguntas con citas a tus archivos y crea
+Memex Offline es un **buscador personal** que indexa texto, notas, código, PDFs,
+imágenes (OCR), audio, vídeo, ZIP/gzip y páginas web guardadas. Busca por palabras
+exactas (BM25), por coincidencia difusa o por significado con embeddings
+neuronales opcionales, responde preguntas con **citas a tus archivos** y crea
 *trails* (caminos asociativos) entre documentos.
 
-**Sin nube, sin telemetría, sin GPU y sin dependencias** (solo Node.js). La capa
-de IA generativa es **opcional**: el proyecto funciona por completo sin ella.
+Todo ocurre en tu máquina: **sin nube, sin telemetría, sin GPU y sin dependencias
+npm**. La capa de IA generativa es opcional; el proyecto funciona por completo sin
+ella.
 
-## Requisitos
+## Índice
 
-- **Node.js >= 22.13** (usa el módulo integrado `node:sqlite` con FTS5).
-  Verificado con Node v26. Hasta 22.13 (y 23.4 en la línea 23) `node:sqlite`
-  exigía el flag `--experimental-sqlite`, por eso el mínimo no es 22.5: `bin/memex.js`
-  comprueba la versión y avisa con un mensaje claro en lugar de fallar al importar.
-- Opcional, para funciones extra (si no están, se omiten sin fallar):
-  - `pdftotext` (poppler) o `mutool` (mupdf) → texto de PDFs.
-  - `tesseract` → OCR de imágenes.
-  - `whisper-cli` / `whisper` (+ `ffmpeg`) → transcripción de audio/vídeo.
+- [¿Por qué Memex?](#por-qué-memex)
+- [Instalación](#instalación)
+- [Uso rápido](#uso-rápido)
+- [Comandos](#comandos)
+- [Interfaz web y API](#interfaz-web-y-api)
+- [Extensión de navegador](#extensión-de-navegador)
+- [Servidor MCP](#servidor-mcp)
+- [Configuración](#configuración)
+- [Qué indexa](#qué-indexa)
+- [Cómo funciona](#cómo-funciona)
+- [Tests, CI y benchmarks](#tests-ci-y-benchmarks)
+- [Limitaciones](#limitaciones)
+- [Privacidad y seguridad](#privacidad-y-seguridad)
+- [Contribuir](#contribuir)
+- [Licencia](#licencia)
+
+## ¿Por qué Memex?
+
+| | Memex Offline |
+| --- | --- |
+| **Privado por diseño** | El índice vive en un SQLite local. La red solo se usa si configuras un proveedor RAG o descargas un modelo. |
+| **Ligero** | Solo Node.js. Sin `npm install`, sin nativos, sin GPU. |
+| **Multimodal** | Texto, código, PDF, OCR, audio/vídeo, comprimidos y webs guardadas. |
+| **Explicable** | Cada resultado dice si vino de BM25, de embeddings o de ambos, con el fragmento y la ruta. |
+| **Degrada con gracia** | Si falta Tesseract, ffmpeg u ONNX, esa capacidad se omite y el resto sigue. |
+| **Abierto** | MIT, sin telemetría y con un modelo de amenazas documentado. |
+
+La idea viene del **Memex de Vannevar Bush (1945)**: un archivo personal donde uno
+puede consultar todo lo que sabe y recorrer *trails* entre documentos. La nube lo
+hizo ubicuo, pero fragmentado y opaco; esto es la versión local y tuya.
 
 ## Instalación
+
+Requisito único: **Node.js >= 22.13** (usa `node:sqlite` con FTS5; verificado con
+Node 26). No hay dependencias que instalar.
 
 ```bash
 git clone https://github.com/jmarc9901/memex.git
@@ -35,8 +73,32 @@ cd memex
 node bin/memex.js --help
 ```
 
-No hay dependencias que instalar. Opcionalmente, `npm link` para tener el
-comando `memex` disponible en el `PATH`.
+Para tener el comando `memex` en el `PATH`:
+
+```bash
+npm link                 # opción directa
+./install-cli.sh         # instalador con comprobaciones (Linux/macOS)
+install-cli.cmd          # instalador con comprobaciones (Windows)
+```
+
+La UI tiene su propio instalador en un paso (detecta hardware, elige modelo,
+configura, indexa y crea lanzadores):
+
+```bash
+./install-ui.sh ~/Documentos         # Linux/macOS
+install-ui.cmd C:\Documentos         # Windows
+```
+
+Guía completa, modelos y resolución de problemas: [docs/INSTALACION.md](docs/INSTALACION.md).
+
+Opcional, solo para capacidades extra (si no están, se omiten sin fallar):
+
+- `pdftotext` (poppler) o `mutool` (mupdf) → texto de PDFs.
+- `tesseract` → OCR de imágenes.
+- `whisper-cli` / `whisper` (+ `ffmpeg`) → transcripción de audio y vídeo.
+- `onnxruntime-node` + un modelo ONNX local → semántica neuronal real.
+
+`node bin/memex.js doctor` te dice qué tienes.
 
 ## Uso rápido
 
@@ -44,117 +106,119 @@ comando `memex` disponible en el `PATH`.
 # 0. Onboarding en un comando: modelo + config + índice (todo local)
 node bin/memex.js init ~/Documentos
 
-# 1. Indexar una carpeta (incremental: solo reprocesa lo que cambió)
+# 1. Indexar una carpeta (incremental y con poda de borrados)
 node bin/memex.js index ~/Documentos
 
-# 2. Buscar por palabras (ranking BM25, fragmentos resaltados)
+# 2. Buscar por palabras (BM25, fragmentos resaltados)
 node bin/memex.js search "ansiedad"
-node bin/memex.js search '"proyecto x" 2024'          # frase exacta
-node bin/memex.js search "informe*"                    # prefijo
-node bin/memex.js search "ansiedad embeddings" --any   # OR en vez de AND
-node bin/memex.js search "como me sentia" --mode semantic  # similitud difusa (no neuronal)
+node bin/memex.js search '"proyecto x" 2024'                 # frase exacta
+node bin/memex.js search "informe*"                          # prefijo
+node bin/memex.js search "ansiedad embeddings" --any         # OR en vez de AND
+node bin/memex.js search "como me sentia" --mode semantic    # similitud difusa
 
-# 3. Preguntar en lenguaje natural (RAG opcional; sin config, muestra fuentes)
+# 3. Preguntar en lenguaje natural (RAG opcional; sin config muestra fuentes)
 node bin/memex.js ask "¿qué conclusiones saqué del proyecto X?"
 
 # 4. Servidor local + GUI web
 node bin/memex.js serve        # http://127.0.0.1:4747
 ```
 
+`init` usa por defecto `all-MiniLM-L6-v2` (~23 MB, inglés). Para corpus en
+español, `init --lang es` descarga el modelo multilingüe (~180 MB) y activa
+semántica real. `--no-model` se queda en el proveedor `hash` (léxico, 256 dims)
+sin descargar nada. Si la descarga falla, el proyecto sigue funcionando.
+
 ## Comandos
 
 | Comando | Descripción |
 | --- | --- |
-| `init [carpeta]` | Onboarding en un paso: prepara el modelo, escribe la config e indexa. |
-| `index [carpeta]` | Indexa (o reindexa) una carpeta de forma incremental. Por defecto, la carpeta actual. |
+| `init [carpeta]` | Onboarding en un paso: modelo, config e índice. |
+| `index [carpeta]` | Indexa o reindexa de forma incremental. Por defecto, la carpeta actual. |
 | `search <consulta>` | Búsqueda híbrida (léxica + semántica) con ranking. Alias: `find`. |
-| `ask <pregunta>` | RAG: recupera contexto local y, si hay proveedor configurado, genera una respuesta. |
+| `ask <pregunta>` | RAG: recupera contexto local y, si hay proveedor, genera respuesta. |
 | `export <consulta>` | Exporta resultados a `jsonl` (defecto), `csv` o `md`. |
-| `relate <ref>` | Documentos más parecidos a una ruta o consulta (por vectores). |
+| `relate <ref>` | Documentos más parecidos a una ruta o consulta. |
 | `trails` | Lista los trails existentes. |
-| `trail create/add/link/show/rm` | Crea y edita trails asociativos. |
+| `trail create/add/link/show/suggest/rm` | Crea y edita trails asociativos. |
 | `serve` | Arranca la API local y la GUI web. |
-| `mcp` | Arranca un servidor MCP local (stdio) para agentes de IA. |
-| `doctor` | Diagnóstico: herramientas externas, configuración efectiva y (`--ping`) servidores RAG locales. |
-| `models` | Lista los modelos ofrecidos por los servidores LLM locales detectados. |
-| `bench [carpeta]` | Benchmark reproducible de indexado y búsqueda sobre un índice desechable. |
-| `stats` | Estadísticas del índice (archivos, fragmentos, vectores, trails). |
-| `clear` | Vacía el índice (documentos, chunks y trails). |
-| `embed [carpeta]` | Mantiene el texto al día y calcula los embeddings pendientes. Con el proveedor `onnx`, calcula los vectores neuronales. `--force` los recomputa todos. |
-| `config show\|set\|path` | Muestra o edita la configuración efectiva (`config set rag.provider ollama`). |
+| `mcp` | Servidor MCP local (stdio) para agentes de IA. |
+| `doctor` | Diagnóstico: herramientas, configuración y (`--ping`) servidores RAG. |
+| `models` | Modelos ofrecidos por los LLM locales detectados. |
+| `bench [carpeta]` | Benchmark reproducible sobre un índice desechable. |
+| `stats` | Estadísticas del índice. |
+| `clear` | Vacía el índice (documentos, chunks, vectores y trails). |
+| `embed [carpeta]` | Calcula los embeddings pendientes (o todos con `--force`). |
+| `config show\|set\|path` | Muestra o edita la configuración efectiva. |
 
 ### Opciones comunes
 
 | Opción | Descripción |
 | --- | --- |
-| `--db RUTA` | Base de datos del índice (por defecto `./.memex/index.db`, o `$MEMEX_DB`). |
+| `--db RUTA` | Base de datos del índice (defecto `./.memex/index.db` o `$MEMEX_DB`). |
 | `--force` | Reindexa todo ignorando la caché por fecha/tamaño. |
+| `--force-download` | Vuelve a descargar el modelo ONNX aunque ya exista. |
+| `--no-prune` | No elimina del índice los archivos borrados del disco. |
 | `--no-embed` | Indexa solo texto, sin calcular embeddings. |
-| `--mode` | `hybrid` (defecto), `lexical` o `semantic`. El modo `semantic` usa *embeddings* léxicos locales (coincidencia difusa), **no** semántica neuronal; ver [Limitaciones](#limitaciones). |
-| `-n`, `--limit` | Número máximo de resultados (por defecto 20). |
+| `--mode` | `hybrid` (defecto), `lexical` o `semantic`. |
+| `-n`, `--limit` | Máximo de resultados (1–100; defecto 20). |
 | `--any` | Une los términos con OR. |
-| `--format` | Formato de `export`: `jsonl`, `csv` o `md`. |
+| `--format` | Formato de `export` (o de `trail show`). |
 | `-o`, `--out` | Archivo de salida de `export`. |
-| `--host`, `--port` | Host y puerto de `serve`. Cambiar `--host` fuera de loopback exige `--allow-remote`. |
-| `--allow-remote` | (`serve`) Permite escuchar fuera de `localhost`. La API **no tiene autenticación**: úsalo solo en redes de confianza. |
+| `--host`, `--port` | Host y puerto de `serve`. Fuera de loopback exige `--allow-remote`. |
+| `--allow-remote` | Permite escuchar fuera de `localhost` (la API no tiene autenticación). |
 | `--ping` | (`doctor`) Comprueba si los servidores RAG locales responden. |
-| `--json` | Salida en JSON (para scripts). |
+| `--json` | Salida en JSON para scripts. |
 
-### Ejemplos
+Referencia completa: [docs/CLI.md](docs/CLI.md).
 
-```bash
-node bin/memex.js export "ansiedad" --format csv -o ansiedad.csv
-node bin/memex.js trail create proyecto-x --desc "cómo llegué a las conclusiones"
-node bin/memex.js trail add proyecto-x ~/notas/proyecto.md --note "borrador"
-node bin/memex.js trail link proyecto-x ~/notas/proyecto.md ~/notas/revision.md
-node bin/memex.js trail show proyecto-x --json      # grafo listo para D3
-node bin/memex.js trail show proyecto-x --format mermaid  # diagrama Mermaid
-node bin/memex.js trail show proyecto-x --format dot      # Graphviz DOT
-node bin/memex.js trail show proyecto-x --format md       # Markdown
-node bin/memex.js serve --port 8080
-```
+## Interfaz web y API
 
-## Interfaz gráfica web
+`memex serve` sirve una GUI sin dependencias (HTML/CSS/JS vanilla) en
+`http://127.0.0.1:4747`:
 
-`memex serve` levanta un servidor que escucha **solo en loopback** por defecto y
-sirve una GUI sin dependencias (HTML/CSS/JS vanilla) en `http://127.0.0.1:4747`.
-Escuchar en otra interfaz (`--host 0.0.0.0`) se rechaza salvo que pases
-`--allow-remote`, porque la API no tiene autenticación:
-
-- **Buscar**: pestañas de modo, resaltado de coincidencias, OR opcional.
+- **Buscar**: modos, OR, límite, resaltado de coincidencias y **documentos
+  relacionados** de cada resultado.
 - **Preguntar**: respuesta RAG con lista de fuentes citadas.
-- **Trails**: listar, abrir y añadir nodos; visualizar el grafo como SVG y descargarlo en DOT o Markdown (o copiar el diagrama Mermaid).
-- **Indexar**: lanzar el indexado de una carpeta y ver el resumen.
+- **Trails**: listar, abrir, añadir nodos, ver el grafo en SVG y descargarlo en
+  DOT o Markdown (o copiar Mermaid).
+- **Indexar**: lanzar el indexado o indexar + calcular vectores, con el resumen
+  (incluidos los archivos eliminados).
 
-La GUI se apoya en la misma API que consume la extensión:
+La API es la misma que consume la extensión. Rutas principales:
+`/api/health`, `/api/stats`, `/api/search`, `/api/relate`, `/api/trails`,
+`/api/save`, `/api/ask`, `/api/index`, `/api/embed`, `/api/tools` y
+`/api/config`. Referencia completa con ejemplos y códigos de error:
+[docs/API.md](docs/API.md).
 
-| Método | Ruta | Descripción |
-| --- | --- | --- |
-| `GET` | `/api/stats` | Estadísticas del índice. |
-| `GET` | `/api/search?q=&mode=&any=&limit=` | Búsqueda. |
-| `GET` | `/api/relate?ref=&limit=` | Documentos relacionados. |
-| `GET` | `/api/trails` · `/api/trails/:name?format=json\|dot\|mermaid\|md` | Listar / exportar un trail (D3 por defecto). |
-| `POST` | `/api/trails/:name` | Añadir nodo (`{ref,note}`) o enlace (`{from,to,label}`). |
-| `POST` | `/api/save` | Guardar un documento (`{url,title,text}`). |
-| `POST` | `/api/ask` | Pregunta RAG. |
-| `POST` | `/api/index` | Indexar una carpeta (`{path}`). |
-| `POST` | `/api/embed` | Indexar y calcular los embeddings pendientes (`{path, force?}`). |
-| `GET` | `/api/tools` | Herramientas opcionales disponibles y configuración. |
-| `GET` | `/api/config` | Configuración activa. |
+## Extensión de navegador
 
-## Extensión de navegador (opcional)
-
-En `extension/` hay una extensión Chromium (MV3) que guarda la página actual o
-la selección en tu índice local vía `POST /api/save`. Solo habla con
+En `extension/` hay una extensión Chromium (MV3) que guarda la página actual o la
+selección en tu índice vía `POST /api/save`. Solo habla con
 `127.0.0.1`/`localhost`; no envía nada a internet. Instrucciones en
 [extension/README.md](extension/README.md).
+
+## Servidor MCP
+
+`memex mcp` expone el índice como herramientas MCP por **stdio**, todo en tu
+máquina. Claude Desktop, Cursor, Continue o cualquier cliente MCP pueden buscar
+en tus archivos:
+
+```json
+{
+  "mcpServers": {
+    "memex": { "command": "node", "args": ["/ruta/a/memex/bin/memex.js", "mcp"] }
+  }
+}
+```
+
+Herramientas: `memex_search`, `memex_ask`, `memex_relate`, `memex_trails`,
+`memex_trail_show`, `memex_stats` y `memex_index`.
 
 ## Configuración
 
 Precedencia: **variables de entorno > archivo de config > valores por defecto**.
-
-El archivo de config se busca, por orden, en `$MEMEX_CONFIG`,
-`./.memex/config.json` y `~/.memex/config.json`:
+El archivo se busca, por orden, en `$MEMEX_CONFIG`, `./.memex/config.json` y
+`~/.memex/config.json`.
 
 ```json
 {
@@ -162,6 +226,7 @@ El archivo de config se busca, por orden, en `$MEMEX_CONFIG`,
   "embed_dim": 256,
   "embed_model": "",
   "embed_tokenizer": "",
+  "embed_cased": false,
   "rag": {
     "enabled": false,
     "provider": "openai-compatible",
@@ -173,71 +238,44 @@ El archivo de config se busca, por orden, en `$MEMEX_CONFIG`,
 }
 ```
 
-`rag.provider` acepta `openai-compatible`, `groq`, `openrouter`, `gemini`
-(Google) y los presets locales `ollama` (`127.0.0.1:11434`), `llamacpp`
-(`127.0.0.1:8080`) y `lmstudio` (`127.0.0.1:1234`). Los proveedores locales no
-necesitan `api_key`. Cloudflare Workers AI se usa vía `base_url` (la URL incluye
-el `account_id`), ya que es específica de cada cuenta.
+`rag.provider` acepta `openai-compatible`, `groq`, `openrouter`, `gemini` y los
+presets locales `ollama` (`127.0.0.1:11434`), `llamacpp` (`127.0.0.1:8080`) y
+`lmstudio` (`127.0.0.1:1234`). Los proveedores locales no necesitan clave.
+Cloudflare Workers AI se usa vía `base_url` (la URL incluye el `account_id`).
 
-### LLM local (Ruta 3)
+Variables: `MEMEX_DB`, `MEMEX_CONFIG`, `MEMEX_MODELS_DIR`,
+`MEMEX_EMBED_PROVIDER`, `MEMEX_EMBED_DIM`, `MEMEX_EMBED_MODEL`,
+`MEMEX_EMBED_TOKENIZER`, `MEMEX_EMBED_MAX_LEN`, `MEMEX_EMBED_CASED`,
+`MEMEX_RAG_API_KEY`, `MEMEX_RAG_BASE_URL`, `MEMEX_RAG_MODEL`,
+`MEMEX_RAG_PROVIDER`, `MEMEX_PORT`, `MEMEX_OCR_LANG`, `MEMEX_WHISPER_MODEL`.
 
-`memex models` detecta servidores locales (Ollama, llama.cpp, LM Studio) y lista
-sus modelos; `memex doctor --ping` comprueba si responden. Si no configuras
-`rag.model`, `memex ask` usa el primer modelo que ofrezca el endpoint, así que
-basta con tener un servidor local corriendo:
+### LLM local
+
+`memex models` detecta servidores locales y lista sus modelos; `memex doctor
+--ping` comprueba si responden. Si no configuras `rag.model`, `memex ask` usa el
+primer modelo disponible:
 
 ```bash
 ollama serve              # en otra terminal
-node bin/memex.js models   # -> ✓ ollama  llama3.2
+node bin/memex.js models  # -> ✓ ollama  llama3.2
 node bin/memex.js ask "¿qué conclusiones saqué?"
 ```
 
-Todo el flujo (recuperación y generación) ocurre en tu máquina.
+### Embeddings neuronales
 
-Variables de entorno: `MEMEX_DB`, `MEMEX_CONFIG`, `MEMEX_MODELS_DIR`,
-`MEMEX_EMBED_PROVIDER`, `MEMEX_EMBED_DIM`, `MEMEX_EMBED_MODEL`,
-`MEMEX_EMBED_TOKENIZER`, `MEMEX_EMBED_MAX_LEN`, `MEMEX_RAG_API_KEY`,
-`MEMEX_RAG_BASE_URL`, `MEMEX_RAG_MODEL`, `MEMEX_RAG_PROVIDER`, `MEMEX_PORT`,
-`MEMEX_OCR_LANG`, `MEMEX_WHISPER_MODEL`.
-
-## Servidor MCP (para agentes de IA)
-
-`memex mcp` expone tu índice local como herramientas MCP por **stdio**, todo en
-tu máquina (no hay que alojar nada). Claude Desktop, Cursor, Continue o cualquier
-cliente MCP pueden buscar en tus archivos. Herramientas: `memex_search`,
-`memex_ask`, `memex_relate`, `memex_trails`, `memex_trail_show`, `memex_stats`,
-`memex_index`.
-
-```json
-{
-  "mcpServers": {
-    "memex": { "command": "node", "args": ["/ruta/a/memex/bin/memex.js", "mcp"] }
-  }
-}
-```
-
-### Embeddings neuronales (opcional, Ruta 1 ampliada)
-
-Por defecto los *embeddings* son "hash" (léxicos). Para semántica **real**
-(sinónimos, paráfrasis) puedes usar un modelo BERT local ejecutado con
-`onnxruntime-node`. Es totalmente opcional y sigue siendo offline:
+Por defecto los embeddings son `hash` (léxicos). Para semántica **real**
+(sinónimos, paráfrasis) usa un modelo BERT local con `onnxruntime-node`:
 
 ```bash
-# 1. Instala el runtime (dependencia opcional, solo si quieres onnx)
 npm install onnxruntime-node
-# 2. Descarga all-MiniLM-L6-v2 en onnx + su vocab.txt (p. ej. desde HF)
-# 3. Configúralo apuntando al modelo local
-node bin/memex.js config set embed_provider onnx
-node bin/memex.js config set embed_dim 384
-node bin/memex.js config set embed_model /ruta/all-MiniLM-L6-v2.onnx
-# 4. Indexa y calcula los vectores
-node bin/memex.js index ~/Documentos
-node bin/memex.js embed ~/Documentos
+node bin/memex.js init ~/Documentos --lang es   # descarga y configura el modelo
+node bin/memex.js embed ~/Documentos --force    # vectoriza por lotes
 ```
 
-Si falta `onnxruntime-node` o el modelo, se avisa y se usa el proveedor
-`hash` sin fallar. Al cambiar de proveedor hay que recalcular los vectores
-(`embed --force`) para que las dimensiones coincidan.
+Si falta el runtime o el modelo, se avisa y se usa `hash` sin fallar. El tokenizer
+respeta mayúsculas y acentos cuando el modelo es *cased* (el multilingüe) y
+procesa lotes de 16 textos por pasada. Si cambias de proveedor o de dimensión,
+recalcula con `embed --force`.
 
 ## Qué indexa
 
@@ -247,124 +285,123 @@ Si falta `onnxruntime-node` o el modelo, se avisa y se usa el proveedor
 - **Código:** `.js/.ts/.tsx/.py/.rb/.go/.rs/.java/.c/.cpp/.cs/.sh/.sql/.css/...`.
 - **PDF:** con `pdftotext` o `mutool` si están instalados; si no, se omiten.
 - **Imágenes:** OCR con `tesseract` si está instalado.
-- **Comprimidos:** `.zip` (se indexan sus entradas de texto/código) y `.gz`
-  de texto, sin dependencias. Se omiten entradas binarias, cifradas y de
-  métodos no soportados.
+- **Comprimidos:** `.zip` (se indexan sus entradas de texto/código) y `.gz` de
+  texto, sin dependencias.
 - **Audio/vídeo:** transcripción con `whisper.cpp` o `whisper` de Python.
 - **Web:** páginas guardadas desde la extensión (`source: "extension"`).
 
-Se ignoran archivos binarios, carpetas como `.git`, `node_modules`, `dist`,
-`build`, `__pycache__`, `.venv`, etc., y archivos de más de 25 MB.
+Se ignoran binarios, carpetas como `.git`, `node_modules`, `dist`, `build`,
+`__pycache__`, `.venv`, etc., y archivos de más de 25 MB.
 
 ## Cómo funciona
 
-1. `walkFiles` recorre la carpeta y filtra por extensión y reglas de ignorado.
-2. `extractText` lee cada archivo (descarta binarios y archivos enormes) y
-   `chunkText` lo trocea en fragmentos de ~1600 caracteres respetando párrafos.
-3. Cada fragmento va a la tabla `chunks` y a la tabla virtual FTS5 `chunks_fts`
-   (tokenizer `unicode61 remove_diacritics 2`: *cancion* encuentra *Canción*).
-4. Los embeddings se guardan como BLOB en `chunks.embedding`. Por defecto son
-   *feature hashing* en CPU (256 dims, sin dependencias): **léxicos**, toleran
-   erratas pero no sinónimos. Con `embed_provider: "onnx"` se calculan vectores
-   neuronales reales con un modelo BERT local (`memex embed`).
-5. `hybridSearch` combina el ranking BM25 con la similitud coseno y fusiona
-   ambas listas con **Reciprocal Rank Fusion**.
+1. `walkFiles` recorre la carpeta (y falla con un mensaje claro si la ruta no
+   existe) y filtra por extensión y reglas de ignorado.
+2. `extractText` lee cada archivo y `chunkText` lo trocea en fragmentos de ~1600
+   caracteres respetando párrafos.
+3. Cada fragmento va a `chunks` y a la tabla virtual FTS5 `chunks_fts`
+   (`unicode61 remove_diacritics 2`: *cancion* encuentra *Canción*).
+4. Los embeddings se guardan como BLOB y se indexan en memoria con un prefiltro
+   binario (popcount) antes del coseno exacto.
+5. `hybridSearch` combina BM25 y similitud coseno con **Reciprocal Rank Fusion**.
 6. `ask` recupera los fragmentos más relevantes y construye un prompt con citas.
-7. El indexado es **incremental**: si el tamaño y la fecha no cambian, no se
-   reprocesa el archivo. `--force` ignora la caché.
+7. El indexado es **incremental** (tamaño + mtime): no reprocesa lo que no cambió
+   y **elimina del índice los archivos que ya no existen** bajo esa carpeta
+   (`--no-prune` lo desactiva).
 
-### Arquitectura
-
-```
-bin/memex.js      entrada CLI
-src/cli.js        parsing de argumentos y comandos
-src/config.js     config (archivo + entorno)
-src/db.js         SQLite + FTS5, esquema, consultas, trails
-src/indexer.js    indexado incremental y guardado de documentos web
-src/extract.js    recorrido, extracción y chunking
-src/archive.js    lectura de ZIP/gzip sin dependencias
-src/query.js      construcción de consultas FTS5
-src/embeddings.js embeddings en CPU (hash) y utilidades de vectores
-src/onnx.js       embeddings neuronales opcionales (ONNX: tokenizer + pooling)
-src/search.js     búsqueda híbrida + fusión RRF
-src/rag.js        recuperación + generación opcional
-src/trails.js     trails asociativos y relación entre documentos
-src/ocr.js        OCR opcional (tesseract)
-src/media.js      transcripción opcional (whisper)
-src/doctor.js     diagnóstico de herramientas externas y configuración
-src/bench.js      benchmark de indexado y búsqueda
-src/tools.js      detección de binarios externos
-src/server.js     API local + GUI web
-web/              GUI (HTML/CSS/JS vanilla)
-extension/        extensión de navegador (MV3)
+```mermaid
+flowchart LR
+  A[walkFiles] --> B[extractText]
+  B --> C[chunkText]
+  C --> D[(SQLite + FTS5)]
+  C --> E[embeddings]
+  E --> F[(vectores)]
+  Q[consulta] --> G[BM25]
+  Q --> H[coseno + prefiltro]
+  D --> G
+  F --> H
+  G --> I[RRF]
+  H --> I
+  I --> R[resultados / RAG]
 ```
 
-## Tests
+Detalle de módulos, modelo de datos e invariantes: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
+
+## Tests, CI y benchmarks
 
 ```bash
-npm test        # node --test
+npm run check      # sintaxis de todos los .js (sin dependencias)
+npm test           # 144 pruebas con node --test
+npm run coverage   # cobertura integrada de node --test
+npm run bench      # benchmark de indexado y búsqueda
 ```
 
-Cubren parseo de consultas, chunking, indexado incremental, búsqueda léxica y
-semántica, fusión RRF, embeddings, trails, RAG offline y los endpoints HTTP.
+La suite cubre parseo de consultas, chunking, indexado incremental y **poda**,
+búsqueda léxica/semántica, fusión RRF, embeddings (incluido batching), caché
+vectorial, trails, RAG offline y con proveedor simulado, la API HTTP, el servidor
+MCP, los instaladores, la extensión y los helpers de la GUI. `test/quality.test.js`
+mide **precision@1 / recall@3** sobre un corpus etiquetado: es la red que detecta
+regresiones de ranking, no solo que la búsqueda devuelva algo.
 
-## Benchmarks
-
-En un equipo modesto, el objetivo es indexar y buscar sin GPU y con un consumo
-de RAM bajo. El propio CLI reporta tiempos:
+CI: matriz Linux/Windows/macOS × Node 22.13/24/26, `npm ci`, `check`, `test` y
+cobertura en Linux/26. Sin dependencias: los únicos "paquetes" son las acciones
+del workflow.
 
 ```bash
-node bin/memex.js bench ~/Documentos          # indexado + latencia de búsqueda
-node bin/memex.js bench ~/Documentos --json    # mismas métricas en JSON
-node bin/memex.js index ~/Documentos --json    # campo "seconds"
-node bin/memex.js search "ansiedad" --json     # campo "took_ms"
-node bin/memex.js stats                        # tamaño del índice
+node bin/memex.js bench ~/Documentos          # archivos/s, latencia y RSS
+node bin/memex.js bench ~/Documentos --json
 ```
 
-`memex bench` indexa en un índice temporal (no toca tu índice real), mide
-archivos/s, la mediana de latencia de búsqueda y el RSS, y borra todo al salir.
-
-## Roadmap
-
-La visión completa (fases, rutas de IA y proveedores gratuitos) está en
-[docs/ROADMAP.md](docs/ROADMAP.md). Estado actual: **fases 1-8 implementadas**.
+`bench` indexa en un índice temporal (no toca el real) y lo borra al salir.
 
 ## Limitaciones
 
 - **La búsqueda "semántica" es léxica por defecto.** Sin configurar nada, los
-  vectores usan *feature hashing* (solapamiento léxico tolerante a erratas),
-  no significado: una paráfrasis sin palabras en común no aparecerá. Para
-  semántica real, activa el proveedor `onnx` (ver más arriba); es opcional y
-  requiere instalar un runtime y un modelo local.
-- **El índice semántico se puntúa en CPU sobre todos los fragmentos con
-  vector** (escaneo lineal). Es suficiente para corpus personales (decenas de
-  miles de fragmentos), pero no está pensado para millones.
-- Las herramientas opcionales (PDF, OCR, transcripción) requieren binarios
-  externos; sin ellos esas partes simplemente se omiten.
+  vectores usan *feature hashing* (solapamiento léxico tolerante a erratas), no
+  significado: una paráfrasis sin palabras en común no aparecerá. Para semántica
+  real, activa `onnx` (opcional, requiere runtime y modelo local).
+- **PDF escaneado sin capa de texto:** no hay rasterizado + OCR de páginas; se
+  omiten si `pdftotext`/`mutool` no extraen texto.
+- **Escala personal.** El índice semántico en memoria y el prefiltro binario van
+  bien con decenas o cientos de miles de fragmentos, no con millones.
+- **El índice no está cifrado.** Es SQLite local; protege la carpeta con los
+  permisos del sistema.
+- **El indexado es single-process.** El servidor cede el event loop entre
+  archivos, pero un archivo enorme (o un OCR lento) bloquea mientras se procesa.
+- **Modelo multilingüe pesado:** ~180 MB frente a los 23 MB del MiniLM inglés.
+  En equipos modestos, `--no-model` o `--quality speed` mantienen el onboarding
+  ligero; la búsqueda léxica sigue funcionando.
 
 ## Privacidad y seguridad
 
-- El servidor escucha **solo en loopback** y sirve la GUI desde ahí. Un `--host`
-  no local sin `--allow-remote` se rechaza al arrancar, para que el índice no
-  quede expuesto por descuido (la API no tiene autenticación).
-- Las respuestas de la GUI llevan `Content-Security-Policy` (sin recursos
-  externos ni scripts inline), `X-Content-Type-Options: nosniff`,
-  `X-Frame-Options: DENY` y `Referrer-Policy: no-referrer`; el servidor de
-  ficheros está confinado a `web/`.
+- El servidor escucha **solo en loopback** por defecto. Un `--host` no local sin
+  `--allow-remote` se rechaza al arrancar, porque la API no tiene autenticación.
 - La API rechaza peticiones con un `Origin` que no sea de `localhost`/`127.0.0.1`
-  ni de una extensión de navegador, de modo que una web que visites no puede
-  leer ni escribir en tu índice. Las extensiones solo hablan con
-  `127.0.0.1`/`localhost`.
-- Sin nube y sin telemetría: toda la recuperación ocurre en tu máquina. El
-  único tráfico de red es hacia el proveedor RAG que configures (opcional).
+  ni de una extensión de navegador: una web que visites no puede leer ni escribir
+  tu índice. Las respuestas no se cachean (`cache-control: no-store`).
+- La GUI lleva `Content-Security-Policy` (sin recursos externos ni scripts
+  inline), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` y
+  `Referrer-Policy: no-referrer`; los estáticos están confinados a `web/`.
+- Sin nube y sin telemetría. El único tráfico de red es hacia el proveedor RAG
+  que configures (opcional) y la descarga del modelo en `init`.
+- Modelo de amenazas y reporte privado: [SECURITY.md](SECURITY.md).
 
 ## Contribuir
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) — cómo montar el proyecto, qué se ejecuta antes de un PR y la regla cero (**sin dependencias**).
-- [SECURITY.md](SECURITY.md) — modelo de amenazas y reporte privado de vulnerabilidades.
-- [CHANGELOG.md](CHANGELOG.md) — qué cambió en cada versión.
+La regla cero es **sin dependencias**: solo biblioteca estándar de Node. Antes de
+un PR: `npm run check`, `npm test` y, si tocas el ranking, mira
+`test/quality.test.js`. Guía completa en [CONTRIBUTING.md](CONTRIBUTING.md);
+código de conducta en [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
+Documentación:
+
+- [docs/CLI.md](docs/CLI.md) — referencia de comandos y opciones.
+- [docs/API.md](docs/API.md) — API HTTP local, parámetros y errores.
+- [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) — módulos, datos e invariantes.
+- [docs/INSTALACION.md](docs/INSTALACION.md) — instalación, modelos y problemas.
+- [docs/PROBAR-UI.md](docs/PROBAR-UI.md) — prueba manual de la UI y la API.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — visión, fases y rutas de IA.
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — código de conducta.
+- [CHANGELOG.md](CHANGELOG.md) — qué cambió en cada versión.
 
 ## Licencia
 

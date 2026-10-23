@@ -141,6 +141,9 @@ export function createEmbedder(config = {}) {
         model,
         tokenizer: config.embed_tokenizer,
         maxLen: config.embed_max_len,
+        // Los modelos *cased* (BERT multilingue) necesitan mayusculas y
+        // acentos; MiniLM ingles funciona mejor en minusculas sin acentos.
+        cased: Boolean(config.embed_cased),
       });
       onnx.dim = dim;
       return onnx;

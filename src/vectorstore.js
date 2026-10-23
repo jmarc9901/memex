@@ -17,8 +17,23 @@ const EXACT_LIMIT = 4096; // por debajo de esto, escaneo exacto (sin prefiltro)
 const SHORTLIST_FACTOR = 40; // tamano del shortlist = k * factor
 const MIN_SHORTLIST = 512;
 
-/** Cache por base de datos: se reconstruye si cambia el numero de vectores. */
+/** Cache por base de datos: se reconstruye si cambia el indice. */
 const caches = new WeakMap();
+
+/**
+ * `PRAGMA data_version` cambia cuando OTRA conexion escribe en la base. Un
+ * `memex serve` de larga vida se quedaba con la cache vieja si `memex index`
+ * se ejecutaba en otra terminal y el numero de fragmentos no cambiaba.
+ * @returns {number}
+ */
+function dataVersion(db) {
+  try {
+    const row = db.prepare("PRAGMA data_version").get();
+    return Number(row?.data_version ?? 0);
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * Construye (o reutiliza) el indice en memoria de una base de datos.
@@ -29,12 +44,13 @@ const caches = new WeakMap();
  */
 export function getStore(db) {
   const count = embeddedChunkCount(db);
+  const version = dataVersion(db);
   const cached = caches.get(db);
-  if (cached && cached.count === count) return cached.store;
+  if (cached && cached.count === count && cached.version === version) return cached.store;
 
   const rows = chunksWithEmbeddings(db);
   if (!rows.length) {
-    caches.set(db, { count, store: null });
+    caches.set(db, { count, version, store: null });
     return null;
   }
 
@@ -77,7 +93,7 @@ export function getStore(db) {
   }
   store.count = row;
 
-  caches.set(db, { count, store });
+  caches.set(db, { count, version, store });
   return store;
 }
 

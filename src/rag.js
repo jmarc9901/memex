@@ -121,7 +121,7 @@ export async function ask(db, question, opts) {
 
   const rag = config.rag ?? {};
   const baseUrl = resolveBaseUrl(rag);
-  if (!baseUrl || (!rag.api_key && !isLocal(baseUrl))) {
+  if (!baseUrl || (!rag.api_key && !isLocalUrl(baseUrl))) {
     return { answer: null, offline: true, context };
   }
 
@@ -160,6 +160,23 @@ export async function ask(db, question, opts) {
   }
 }
 
-function isLocal(url) {
-  return /localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]/.test(url);
+/**
+ * ¿La URL apunta a la propia maquina? Se compara el hostname completo (no una
+ * regex sobre la cadena): `http://localhost.evil.example` no es local aunque
+ * contenga la palabra "localhost".
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isLocalUrl(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "::1" ||
+      host === "0.0.0.0" ||
+      /^127\.\d{1,3}(\.\d{1,3}){2}$/.test(host)
+    );
+  } catch {
+    return false;
+  }
 }

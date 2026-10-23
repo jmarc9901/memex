@@ -41,7 +41,7 @@ Principios:
 | --- | --- | --- | --- |
 | 1 | CLI que indexa una carpeta y permite búsqueda full-text | ✅ Hecho | `src/indexer.js`, `src/db.js`, `src/query.js` |
 | 2 | Búsqueda difusa (embeddings léxicos en CPU) + fusión RRF | ✅ Hecho | `src/embeddings.js`, `src/search.js` |
-| 3 | OCR para imágenes y PDFs escaneados | ✅ Hecho (opcional) | `src/ocr.js` |
+| 3 | OCR de imágenes | ✅ Hecho (opcional; los PDFs escaneados sin capa de texto no se rasterizan) | `src/ocr.js` |
 | 4 | Transcripción de audio/vídeo | ✅ Hecho (opcional) | `src/media.js` |
 | 5 | Preguntas y respuestas con RAG (proveedor opcional) | ✅ Hecho | `src/rag.js` |
 | 6 | GUI de escritorio / web | ✅ Hecho (web) | `src/server.js`, `web/` |
@@ -54,6 +54,8 @@ Principios:
 | 13 | Índice vectorial en memoria + prefiltro binario (escala) | ✅ Hecho | `src/vectorstore.js` |
 | 14 | Servidor MCP local (stdio) para agentes de IA | ✅ Hecho | `src/mcp.js` |
 | 15 | Onboarding en un comando (`memex init`) | ✅ Hecho | `src/init.js` |
+| 16 | Endurecimiento y coherencia: poda de borrados, rutas validadas, caché entre procesos, batching y modelos cased | ✅ Hecho (0.4.0) | `src/indexer.js`, `src/onnx.js`, `src/vectorstore.js` |
+| 17 | Calidad y documentación: tests de UI/extensión, API y arquitectura, assets e iconos | ✅ Hecho (0.4.0) | `test/`, `docs/`, `assets/` |
 
 ## Rutas de IA (todas opcionales)
 
@@ -68,7 +70,9 @@ dependencias: es la base y funciona siempre.
 La **semántica neuronal real es opcional** (Fase 11): con `embed_provider:
 "onnx"` y un modelo BERT local (all-MiniLM-L6-v2) se calculan embeddings de
 significado con `memex embed`. Requiere instalar `onnxruntime-node` y apuntar
-`embed_model` al .onnx; si falta algo, se avisa y se cae al proveedor `hash`.
+`embed_model` al .onnx; si falta algo, se avisa y se cae al proveedor `hash`. El
+proveedor neuronal vectoriza por lotes y respeta mayúsculas/acentos con modelos
+*cased* (el multilingüe).
 
 ### Ruta 2 — Capa de IA opcional (API compatible OpenAI)
 

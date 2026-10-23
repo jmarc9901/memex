@@ -115,3 +115,26 @@ test("el prefiltro binario no pierde el vecino mas cercano en corpus grande", ()
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("la cache se invalida cuando OTRA conexion modifica el indice", () => {
+  const { root, db } = makeDb(5);
+  const db2 = openDatabase(join(root, ".memex", "index.db"));
+  try {
+    const before = getStore(db);
+    assert.match(before.contents[0], /documento numero 0/);
+
+    // Simula `memex index` en otra terminal: mismo numero de chunks, contenido
+    // distinto. Sin `data_version` la cache de `memex serve` seguia siendo vieja.
+    db2
+      .prepare("UPDATE chunks SET content = ? WHERE id = ?")
+      .run("contenido reemplazado por otra conexion", before.ids[0]);
+
+    const after = getStore(db);
+    assert.notEqual(after, before, "debe reconstruir la cache");
+    assert.match(after.contents[0], /reemplazado/);
+  } finally {
+    db2.close();
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

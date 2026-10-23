@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { openDatabase } from "../src/db.js";
 import { indexFolder } from "../src/indexer.js";
-import { hybridSearch, fuse, makeSnippet } from "../src/search.js";
+import { hybridSearch, fuse, makeSnippet, semanticMinScore } from "../src/search.js";
 import { createEmbedder } from "../src/embeddings.js";
 
 function makeCorpus() {
@@ -66,6 +66,34 @@ test("modos lexical, semantic e hybrid devuelven resultados coherentes", () => {
   }
 });
 
+test("reindexar invalida la cache del indice vectorial", () => {
+  const root = mkdtempSync(join(tmpdir(), "memex-stale-"));
+  const db = openDatabase(join(root, ".memex", "index.db"));
+  const embedder = createEmbedder({ embed_provider: "hash", embed_dim: 256 });
+  const file = join(root, "nota.md");
+  try {
+    writeFileSync(file, "ansiedad terapia bienestar emocional\n");
+    indexFolder(db, root, { embedder });
+    let hits = hybridSearch(db, "ansiedad", { mode: "semantic", embedder });
+    assert.equal(hits[0].name, "nota.md");
+
+    // Mismo numero de chunks (texto corto), contenido distinto: la cache
+    // antigua se reutilizaba y devolvia el fragmento viejo.
+    writeFileSync(file, "receta tarta manzana canela hornear\n");
+    indexFolder(db, root, { embedder, force: true });
+
+    hits = hybridSearch(db, "manzana", { mode: "semantic", embedder });
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].snippet, /manzana/);
+
+    hits = hybridSearch(db, "ansiedad", { mode: "semantic", embedder });
+    assert.equal(hits.length, 0, "el contenido anterior ya no debe existir");
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("el umbral semantico descarta coincidencias sin relacion", () => {
   const root = makeCorpus();
   const db = openDatabase(join(root, ".memex", "index.db"));
@@ -82,4 +110,15 @@ test("el umbral semantico descarta coincidencias sin relacion", () => {
     db.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("el umbral semantico depende del proveedor de embeddings", () => {
+  assert.equal(semanticMinScore(null), 0.1);
+  assert.equal(semanticMinScore({ provider: "hash" }), 0.1);
+  assert.equal(
+    semanticMinScore({ provider: "onnx" }),
+    0.3,
+    "ONNX necesita un corte mas alto que el feature hashing"
+  );
+  assert.ok(semanticMinScore({ provider: "onnx" }) > semanticMinScore({ provider: "hash" }));
 });

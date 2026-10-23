@@ -47,6 +47,42 @@ test("GET /api/stats devuelve el resumen del indice", async () => {
   });
 });
 
+test("GET /api/health responde sin tocar el indice", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/health`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.ok, true);
+    assert.equal(data.name, "memex");
+  });
+});
+
+test("la API responde 400 ante parametros y JSON invalidos, no 500", async () => {
+  await withServer(async (base) => {
+    const badLimit = await fetch(`${base}/api/search?q=ansiedad&limit=abc`);
+    assert.equal(badLimit.status, 400);
+    assert.match((await badLimit.json()).error, /limit invalido/);
+
+    const badMode = await fetch(`${base}/api/search?q=ansiedad&mode=nope`);
+    assert.equal(badMode.status, 400);
+
+    const badJson = await fetch(`${base}/api/save`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{no es json",
+    });
+    assert.equal(badJson.status, 400);
+    assert.match((await badJson.json()).error, /JSON invalido/);
+
+    const badSave = await fetch(`${base}/api/save`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: 42, text: [] }),
+    });
+    assert.equal(badSave.status, 400);
+  });
+});
+
 test("GET /api/search valida y responde con resultados", async () => {
   await withServer(async (base) => {
     const bad = await fetch(`${base}/api/search?q=`);
@@ -129,6 +165,9 @@ test("sirve la GUI estatica y rechaza rutas desconocidas", async () => {
 
     const css = await fetch(`${base}/styles.css`);
     assert.equal(css.status, 200);
+
+    const lib = await fetch(`${base}/lib.js`);
+    assert.equal(lib.status, 200, "los helpers de la GUI se sirven como modulo");
 
     const nope = await fetch(`${base}/api/desconocido`);
     assert.equal(nope.status, 404);
@@ -247,4 +286,47 @@ test("isAllowedOrigin acepta localhost y extensiones, y rechaza el resto", async
   assert.equal(isAllowedOrigin("https://evil.example"), false);
   assert.equal(isAllowedOrigin("http://localhost.evil.example"), false);
   assert.equal(isAllowedOrigin(undefined), false);
+});
+
+test("POST /api/index valida la carpeta y reindexa de forma asincrona", async () => {
+  await withServer(async (base, root) => {
+    const missing = await fetch(`${base}/api/index`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: join(root, "no-existe") }),
+    });
+    assert.equal(missing.status, 400);
+    assert.match((await missing.json()).error, /no existe la carpeta/);
+
+    const notDir = await fetch(`${base}/api/index`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: join(root, "notas.md") }),
+    });
+    assert.equal(notDir.status, 400);
+    assert.match((await notDir.json()).error, /no es una carpeta/);
+
+    const ok = await fetch(`${base}/api/index`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: root }),
+    });
+    assert.equal(ok.status, 200);
+    const summary = await ok.json();
+    assert.equal(summary.scanned, 1);
+    assert.equal(summary.unchanged, 1);
+    assert.equal(summary.pruned, 0);
+  });
+});
+
+test("POST /api/embed valida la carpeta antes de vectorizar", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/embed`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "/ruta/que/no/existe/jamas" }),
+    });
+    assert.equal(res.status, 400);
+    assert.match((await res.json()).error, /no existe la carpeta/);
+  });
 });

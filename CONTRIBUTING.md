@@ -33,8 +33,9 @@ node bin/memex.js --help
 
 ```bash
 npm run check      # sintaxis de todos los .js (sin dependencias, es el "lint")
-npm test           # suite completa con node --test (~25 s)
+npm test           # suite completa con node --test (144 pruebas, ~1 min)
 npm run coverage   # opcional: cobertura de líneas/ramas/funciones
+npm run icons      # regenera los PNG de la extensión si tocas el dibujo
 ```
 
 Los tres tienen que pasar. No hay linter ni formateador a propósito: el "lint" es
@@ -47,11 +48,15 @@ Los tres tienen que pasar. No hay linter ni formateador a propósito: el "lint" 
 bin/memex.js      entrada del CLI (comprueba la versión de Node antes de importar)
 src/cli.js        parseo de argumentos y comandos
 src/db.js         SQLite + FTS5: esquema, consultas, trails
-src/indexer.js    indexado incremental y embeddings por lotes
+src/indexer.js    indexado incremental, poda de borrados y embeddings por lotes
 src/extract.js    recorrido de carpetas, extracción y chunking
 src/search.js     búsqueda híbrida (BM25 + coseno) y fusión RRF
+src/onnx.js       embeddings neuronales opcionales (cased + lotes)
 src/rag.js        recuperación + generación opcional
+web/lib.js        helpers puros de la GUI (testeables sin navegador)
 test/             un fichero de tests por módulo, con node:test
+docs/             CLI, API, arquitectura, instalación, prueba manual y roadmap
+assets/           logo y banner SVG del README
 ```
 
 Un módulo nuevo debería venir con su `test/<modulo>.test.js`. Y si toca el
@@ -72,14 +77,20 @@ ranking, con una mirada a `test/quality.test.js`, que es la red que mide
   sea explícitamente "mejor seguir" (herramientas opcionales, ficheros ilegibles).
 - **Degradación con gracia**: si falta un binario o una capacidad, se avisa y se
   sigue. Nunca se deja el índice a medias (mira `withTransaction` en `src/db.js`).
+- **El índice refleja el disco**: reindexar poda los archivos borrados bajo esa
+  raíz. Si añades una ruta nueva de indexado, respeta el confinamiento por prefijo
+  de `pruneMissing`.
+- **La UI se prueba desde Node**: la lógica sin DOM vive en `web/lib.js` y tiene
+  tests; `web/app.js` solo orquesta el DOM y la API.
 
 ## Proceso
 
 1. Abre una issue antes de trabajos grandes; así no duplicamos esfuerzo.
 2. Rama corta (`fix/…`, `feat/…`) desde `main`.
 3. Un PR por tema, con el contexto de CI en verde.
-4. Los cambios en el comportamiento visible se anotan en `CHANGELOG.md`
-   (sección "Sin publicar").
+4. Los cambios en el comportamiento visible se anotan en `CHANGELOG.md`.
+   Si cambias la API HTTP, actualiza también `docs/API.md`; si cambias módulos o
+   invariantes, `docs/ARQUITECTURA.md`.
 
 ## Seguridad
 

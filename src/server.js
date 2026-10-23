@@ -1,18 +1,21 @@
 // Memex Offline - servidor local (API + GUI web). Solo escucha en localhost.
 import { createServer } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, extname, isAbsolute, join, normalize, relative } from "node:path";
+import { dirname, extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { openDatabase, stats } from "./db.js";
 import { hybridSearch, resolveQueryVec } from "./search.js";
 import { createEmbedder, isAsyncEmbedder } from "./embeddings.js";
 import { loadConfig } from "./config.js";
-import { embedIndex, indexFolder, saveDocument } from "./indexer.js";
+import { embedIndex, indexFolderAsync, saveDocument } from "./indexer.js";
 import { addToTrail, exportTrail, linkInTrail, listTrails, showTrail, relate, toD3 } from "./trails.js";
 import { ask } from "./rag.js";
 import { toolStatus, configStatus, capabilitySummary } from "./doctor.js";
 
 const WEB_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "web");
+const VERSION = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf8")
+).version;
 
 const TRAIL_TYPES = {
   dot: "text/vnd.graphviz; charset=utf-8",
@@ -55,7 +58,10 @@ export function startServer(opts) {
     try {
       await route(req, res, { db, embedder, indexEmbedder, config });
     } catch (err) {
-      sendJson(res, 500, { error: err.message });
+      // Los errores de validacion (400/413) no son fallos internos: no hay que
+      // disfrazarlos de 500 ni filtrar una traza en la respuesta.
+      const status = Number.isInteger(err?.statusCode) ? err.statusCode : 500;
+      sendJson(res, status, { error: err.message });
     }
   });
 
@@ -159,6 +165,10 @@ async function handleApi(req, res, url, { db, embedder, indexEmbedder, config })
   const path = url.pathname;
   const q = url.searchParams;
 
+  if (req.method === "GET" && path === "/api/health") {
+    return sendJson(res, 200, { ok: true, name: "memex", version: VERSION });
+  }
+
   if (req.method === "GET" && path === "/api/stats") {
     return sendJson(res, 200, stats(db));
   }
@@ -167,7 +177,10 @@ async function handleApi(req, res, url, { db, embedder, indexEmbedder, config })
     const query = q.get("q") ?? "";
     if (!query.trim()) return sendJson(res, 400, { error: "falta el parametro q" });
     const mode = q.get("mode") ?? "hybrid";
-    const limit = Number(q.get("limit") ?? 20);
+    if (!SEARCH_MODES.has(mode)) {
+      return sendJson(res, 400, { error: `modo invalido: ${mode} (usa hybrid, lexical o semantic)` });
+    }
+    const limit = parseLimit(q.get("limit"), 20);
     const any = q.get("any") === "1" || q.get("any") === "true";
     const started = Date.now();
     const queryVec = await resolveQueryVec(embedder, query);
@@ -178,7 +191,7 @@ async function handleApi(req, res, url, { db, embedder, indexEmbedder, config })
   if (req.method === "GET" && path === "/api/relate") {
     const ref = q.get("ref") ?? "";
     if (!ref.trim()) return sendJson(res, 400, { error: "falta el parametro ref" });
-    const results = await relate(db, ref, { limit: Number(q.get("limit") ?? 10), embedder });
+    const results = await relate(db, ref, { limit: parseLimit(q.get("limit"), 10), embedder });
     return sendJson(res, 200, { ref, results });
   }
 
@@ -218,29 +231,45 @@ async function handleApi(req, res, url, { db, embedder, indexEmbedder, config })
 
   if (req.method === "POST" && path === "/api/save") {
     const body = await readJson(req);
-    if (!body.text && !body.title) return sendJson(res, 400, { error: "faltan title/text" });
+    if (typeof body.title !== "string" || typeof body.text !== "string" || (!body.title && !body.text)) {
+      return sendJson(res, 400, { error: "faltan title/text (deben ser cadenas)" });
+    }
     const saved = saveDocument(db, { ...body, embedder: indexEmbedder });
-    return sendJson(res, 200, saved);
+    // Con ONNX el guardado es sincrono (solo texto): calculamos aqui los
+    // vectores pendientes para que la pagina sea visible en busqueda semantica
+    // sin tener que reiniciar ni ejecutar `memex embed` a mano.
+    const vectors = isAsyncEmbedder(embedder) ? await embedIndex(db, { embedder }) : null;
+    return sendJson(res, 200, { ...saved, embedded: vectors ? vectors.embedded : null });
   }
 
   if (req.method === "POST" && path === "/api/ask") {
     const body = await readJson(req);
-    if (!body.question) return sendJson(res, 400, { error: "falta question" });
-    const result = await ask(db, body.question, { config, embedder, limit: body.limit ?? 6 });
+    if (typeof body.question !== "string" || !body.question.trim()) {
+      return sendJson(res, 400, { error: "falta question" });
+    }
+    const limit = body.limit === undefined ? 6 : parseLimit(body.limit, 6);
+    const result = await ask(db, body.question, { config, embedder, limit });
     return sendJson(res, 200, result);
   }
 
   if (req.method === "POST" && path === "/api/index") {
     const body = await readJson(req);
-    if (!body.path) return sendJson(res, 400, { error: "falta path" });
-    const summary = indexFolder(db, body.path, { embedder: indexEmbedder });
-    return sendJson(res, 200, summary);
+    if (typeof body.path !== "string" || !body.path.trim()) {
+      return sendJson(res, 400, { error: "falta path" });
+    }
+    const root = assertDirectory(body.path);
+    const summary = await indexFolderAsync(db, root, { embedder: indexEmbedder });
+    const vectors = isAsyncEmbedder(embedder) ? await embedIndex(db, { embedder }) : null;
+    return sendJson(res, 200, { ...summary, embedded: vectors ? vectors.embedded : null });
   }
 
   if (req.method === "POST" && path === "/api/embed") {
     const body = await readJson(req);
-    if (!body.path) return sendJson(res, 400, { error: "falta path" });
-    const index = indexFolder(db, body.path, { embedder: indexEmbedder, force: Boolean(body.force) });
+    if (typeof body.path !== "string" || !body.path.trim()) {
+      return sendJson(res, 400, { error: "falta path" });
+    }
+    const root = assertDirectory(body.path);
+    const index = await indexFolderAsync(db, root, { embedder: indexEmbedder, force: Boolean(body.force) });
     const result = await embedIndex(db, { embedder, force: Boolean(body.force) });
     return sendJson(res, 200, { ...result, text: index });
   }
@@ -263,25 +292,85 @@ async function handleApi(req, res, url, { db, embedder, indexEmbedder, config })
   return sendJson(res, 404, { error: "endpoint no encontrado" });
 }
 
+const SEARCH_MODES = new Set(["hybrid", "lexical", "semantic"]);
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const MAX_LIMIT = 100;
+
+/** Error con codigo HTTP para que el catch de `route` no lo convierta en 500. */
+class HttpError extends Error {
+  constructor(statusCode, message) {
+    super(message);
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Valida un limite numerico. Un `limit=abc` antes llegaba a SQLite como NaN y
+ * provocaba un 500 "datatype mismatch"; ahora es un 400 claro.
+ */
+function parseLimit(raw, fallback) {
+  if (raw === undefined || raw === null || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new HttpError(400, `limit invalido: ${raw} (debe ser un entero >= 1)`);
+  }
+  return Math.min(value, MAX_LIMIT);
+}
+
 function sendJson(res, status, data) {
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
   const body = JSON.stringify(data);
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    // Respuestas del indice: nunca cachear en proxies ni en el navegador.
+    "cache-control": "no-store",
+  });
   res.end(body);
+}
+
+/**
+ * Valida que una ruta de indexado exista y sea una carpeta.
+ * @param {unknown} value
+ * @returns {string} ruta absoluta
+ * @throws {HttpError} 400 si no existe o no es una carpeta
+ */
+function assertDirectory(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new HttpError(400, "falta path");
+  }
+  const path = resolve(value);
+  let info;
+  try {
+    info = statSync(path);
+  } catch {
+    throw new HttpError(400, `no existe la carpeta: ${path}`);
+  }
+  if (!info.isDirectory()) throw new HttpError(400, `no es una carpeta: ${path}`);
+  return path;
 }
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let data = "";
+    let tooLarge = false;
     req.on("data", (chunk) => {
+      if (tooLarge) return;
       data += chunk;
-      if (data.length > 8 * 1024 * 1024) reject(new Error("payload demasiado grande"));
+      if (Buffer.byteLength(data, "utf8") > MAX_BODY_BYTES) {
+        tooLarge = true;
+        data = "";
+      }
     });
     req.on("end", () => {
+      if (tooLarge) return reject(new HttpError(413, "payload demasiado grande"));
       if (!data) return resolve({});
       try {
         resolve(JSON.parse(data));
       } catch {
-        reject(new Error("JSON invalido"));
+        reject(new HttpError(400, "JSON invalido"));
       }
     });
     req.on("error", reject);

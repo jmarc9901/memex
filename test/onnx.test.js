@@ -82,3 +82,21 @@ test("createEmbedder cae a hash si falta el modelo ONNX", () => {
   assert.equal(embed.provider, "hash");
   assert.equal(embed("texto").length, 32);
 });
+
+test("basicClean cased conserva mayusculas y acentos para el modelo multilingue", () => {
+  assert.equal(basicClean("Canción, ¡Hola!"), "cancion , ¡ hola !");
+  assert.equal(basicClean("Canción, ¡Hola!", { cased: true }), "Canción , ¡ Hola !");
+});
+
+test("tokenizeBert cased usa el vocabulario con mayusculas y acentos", () => {
+  const vocab = new Map([
+    ["[PAD]", 0],
+    ["[UNK]", 100],
+    ["[CLS]", 101],
+    ["[SEP]", 102],
+    ["Hola", 300],
+    ["canción", 301],
+  ]);
+  const { ids } = tokenizeBert("Hola canción", vocab, { maxLen: 6, cased: true });
+  assert.deepEqual(ids.slice(0, 4), [101, 300, 301, 102]);
+});

@@ -181,3 +181,40 @@ test("run() rechaza comandos y modos invalidos", async () => {
     /modo invalido/
   );
 });
+
+test("run() acota -n al maximo de resultados de la API", async () => {
+  const root = makeCorpus();
+  try {
+    const dbPath = join(root, ".memex", "index.db");
+    await run(["index", root, "--db", dbPath, "--no-embed"], { stdout: collector() });
+
+    const out = collector();
+    await run(["search", "ansiedad", "-n", "1000000", "--db", dbPath, "--json"], {
+      stdout: out,
+    });
+    const data = JSON.parse(out.text);
+    assert.ok(data.count <= 100, `count=${data.count} deberia estar acotado`);
+    assert.ok(data.results.length <= 100);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run() informa de la poda al reindexar", async () => {
+  const root = makeCorpus();
+  try {
+    const dbPath = join(root, ".memex", "index.db");
+    await run(["index", root, "--db", dbPath, "--no-embed"], { stdout: collector() });
+
+    rmSync(join(root, "receta.txt"));
+    const out = collector();
+    await run(["index", root, "--db", dbPath, "--no-embed", "--json"], { stdout: out });
+    assert.equal(JSON.parse(out.text).pruned, 1);
+
+    const statsOut = collector();
+    await run(["stats", "--db", dbPath, "--json"], { stdout: statsOut });
+    assert.equal(JSON.parse(statsOut.text).files, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

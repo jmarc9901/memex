@@ -11,6 +11,10 @@ const RRF_K = 60;
 // mientras que las coincidencias reales superan ~0.20; el umbral elimina ruido
 // sin descartar coincidencias reales.
 const SEMANTIC_MIN_SCORE = 0.1;
+// ONNX produce cosenos mucho mas altos que el feature hashing, incluso entre
+// textos sin relacion (~0.2-0.4 con MiniLM). El umbral bajo del `hash` dejaria
+// pasar ruido, asi que el proveedor neuronal usa un corte mas alto.
+const SEMANTIC_MIN_SCORE_ONNX = 0.3;
 
 /**
  * @typedef {Object} SearchHit
@@ -38,7 +42,7 @@ export function hybridSearch(db, queryText, opts = {}) {
   const mode = opts.mode ?? "hybrid";
   const limit = Math.max(1, opts.limit ?? 20);
   const any = opts.any ?? false;
-  const minScore = opts.minScore ?? SEMANTIC_MIN_SCORE;
+  const minScore = opts.minScore ?? semanticMinScore(opts.embedder);
   const weights = { lexical: 1, semantic: 1, ...(opts.weights ?? {}) };
   const candidates = Math.max(limit * 5, 50);
 
@@ -54,6 +58,15 @@ export function hybridSearch(db, queryText, opts = {}) {
   if (mode === "semantic") return semantic.slice(0, limit);
 
   return fuse(lexical, semantic, weights).slice(0, limit);
+}
+
+/**
+ * Umbral de similitud coseno que corresponde al proveedor configurado.
+ * @param {Function|null|undefined} embedder
+ * @returns {number}
+ */
+export function semanticMinScore(embedder) {
+  return embedder?.provider === "onnx" ? SEMANTIC_MIN_SCORE_ONNX : SEMANTIC_MIN_SCORE;
 }
 
 /** Calcula el vector de consulta solo si el embedder es sincrono. */

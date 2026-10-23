@@ -18,6 +18,7 @@ concurrency:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -25,7 +26,7 @@ jobs:
         # 22.13.0 es la primera version de la linea 22 donde node:sqlite ya no
         # exige --experimental-sqlite; con 22.5.0 los tests no podrian cargar
         # src/db.js. Ver `engines` en package.json.
-        node: ["22.13.0", "24"]
+        node: ["22.13.0", "24", "26"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -41,5 +42,12 @@ jobs:
         run: npm test
       # La cobertura repite la suite entera, asi que se calcula una sola vez.
       - name: Cobertura
-        if: runner.os == 'Linux' && matrix.node == '24'
+        if: runner.os == 'Linux' && matrix.node == '26'
         run: npm run coverage
+      # El paquete publicado debe llevar docs, assets, iconos y la version
+      # alineada con el manifest de la extension.
+      - name: Verificar el paquete
+        if: runner.os == 'Linux' && matrix.node == '26'
+        run: |
+          npm pack --dry-run
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));const m=JSON.parse(fs.readFileSync('extension/manifest.json','utf8'));if(p.version!==m.version){console.error('version distinta: paquete '+p.version+' vs extension '+m.version);process.exit(1)}for(const f of ['assets/banner.svg','assets/logo.svg','extension/icons/icon128.png','docs/API.md','docs/ARQUITECTURA.md','CITATION.cff'])if(!fs.existsSync(f)){console.error('falta '+f);process.exit(1)}console.log('paquete coherente')"
