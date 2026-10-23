@@ -372,6 +372,9 @@ node bin/memex.js bench ~/Documentos --json
 - **Modelo multilingüe pesado:** ~180 MB frente a los 23 MB del MiniLM inglés.
   En equipos modestos, `--no-model` o `--quality speed` mantienen el onboarding
   ligero; la búsqueda léxica sigue funcionando.
+- **ONNX depende de un runtime nativo:** `onnxruntime-node` puede no tener
+  binarios para la versión de Node más reciente; si no carga, se avisa y se usa
+  `hash` (la búsqueda léxica sigue intacta).
 
 ## Privacidad y seguridad
 

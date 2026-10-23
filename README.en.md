@@ -372,6 +372,9 @@ on exit.
 - **Heavy multilingual model:** ~180 MB vs 23 MB for the English MiniLM. On
   modest machines, `--no-model` or `--quality speed` keep onboarding light;
   lexical search still works.
+- **ONNX depends on a native runtime:** `onnxruntime-node` may not ship binaries
+  for the newest Node release; if it cannot load, you get a warning and `hash`
+  is used (lexical search keeps working).
 
 ## Privacy and security
 

@@ -186,3 +186,8 @@ configuracion/modelos, elimina `./.memex` y `~/.memex` (revisa antes que no
 haya nada que quieras conservar).
 
 **Windows y los scripts `.sh`.** Usa los `.cmd` equivalentes; no necesitas WSL.
+
+**`onnxruntime-node` no se instala o falla al cargar.** El paquete es nativo y
+depende de la version de Node; si el instalador falla (por ejemplo, error
+`3221225794` en Windows con Node 26), usa Node 24 LTS o la version que soporte el
+runtime. Sin el runtime, Memex sigue funcionando con el proveedor `hash`.
