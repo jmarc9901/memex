@@ -15,3 +15,6 @@ coverage/
 # Lanzadores generados por scripts/install-ui.js (llevan rutas absolutas)
 memex-ui.sh
 memex-ui.cmd
+
+# Nota local con lo que falta por verificar o decidir; no se publica
+PENDIENTES.md
